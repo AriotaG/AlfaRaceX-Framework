@@ -1,4 +1,5 @@
 #include "arx/arx_runtime.h"
+#include "arx/arx_telemetry_db.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -60,6 +61,59 @@ static ArxRuntimeOps ops(Sink *s){
         .user=s
     };
     return o;
+}
+
+
+static void telemetry_runtime_unit(void){
+    telemetry_runtime_unit();
+
+    Sink sink={0};
+    ArxRuntimeOps o=ops(&sink);
+    ArxRuntime rt;
+    arx_runtime_init(&rt,ARX_RUNTIME_C1,&o);
+
+    ArxRuntimeConfig cfg;
+    arx_config_defaults(&cfg);
+    cfg.diesel_profile=true;
+    cfg.sniffer_enabled=false;
+    cfg.elm327_enabled=false;
+    arx_runtime_apply_config(&rt,&cfg,0u);
+
+    rt.menu.visible=true;
+    rt.menu.level=ARX_MENU_LEVEL_SUB;
+    rt.menu.main_page=1u;
+    rt.menu.param_page=5u; /* BAT SoC + current, exact BACCAble diesel page 6 */
+
+    ArxCanFrame bat={.bus=ARX_BUS_C1,.id=0x41Au,.dlc=6,
+        .data={0,70,0,0,0x9C,0x40}};
+    arx_runtime_on_can(&rt,&bat,500u);
+    assert(rt.vehicle.valid_mask&ARX_VS_BATTERY_CURR);
+    assert(rt.vehicle.battery_current_a>-0.1f&&rt.vehicle.battery_current_a<0.1f);
+
+    arx_runtime_tick(&rt,1000u);
+    (void)arx_runtime_drain_can(&rt,1000u,16u);
+    bool found_soc_request=false;
+    for(size_t i=0u;i<sink.can_count;i++){
+        if(sink.can[i].id==0x18DA10F1u&&sink.can[i].dlc==4u&&
+           sink.can[i].data[1]==0x22u&&sink.can[i].data[2]==0x19u&&
+           sink.can[i].data[3]==0xBDu)
+            found_soc_request=true;
+    }
+    assert(found_soc_request);
+
+    ArxCanFrame soc={.bus=ARX_BUS_C1,.id=0x18DAF110u,.extended_id=true,.dlc=5u,
+        .data={0x04,0x62,0x19,0xBD,75}};
+    arx_runtime_on_can(&rt,&soc,1010u);
+
+    size_t n=0u;
+    const ArxTelemetryDefinition *db=arx_telemetry_diesel(&n);
+    const ArxTelemetryDefinition *d=arx_telemetry_find(db,n,"battery_soc");
+    assert(d);
+    size_t idx=(size_t)(d-db);
+    assert(idx<ARX_RUNTIME_TELEMETRY_CACHE_MAX);
+    assert(rt.telemetry_valid[idx]);
+    assert(rt.telemetry_values[idx]>74.9f&&rt.telemetry_values[idx]<75.1f);
+    assert(rt.interchip.tx.count>0u); /* formatted dashboard text queued for BH */
 }
 
 int main(void){
