@@ -21,11 +21,11 @@ jobs:
         run: |
           set -euo pipefail
           test -f bootstrap-0.8.0-dev.ready || exit 0
-          cat bootstrap-0.8.0-dev.b64.part* > /tmp/arx.b64
-          base64 -d /tmp/arx.b64 > /tmp/arx.zip
+          cat bootstrap-0.8.0-dev.xz.part* > /tmp/arx.b64
+          base64 -d /tmp/arx.b64 > /tmp/arx.tar.xz
           rm -rf /tmp/arx
           mkdir -p /tmp/arx
-          unzip -q /tmp/arx.zip -d /tmp/arx
+          tar -xJf /tmp/arx.tar.xz -C /tmp/arx
           test -f /tmp/arx/AlfaRaceX-Framework/VERSION
           test "$(cat /tmp/arx/AlfaRaceX-Framework/VERSION)" = "0.8.0-dev"
           rsync -a --delete             --exclude='.git/'             --exclude='.github/workflows/bootstrap-sync.yml'             /tmp/arx/AlfaRaceX-Framework/ ./
