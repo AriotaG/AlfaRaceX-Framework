@@ -5,9 +5,14 @@ on:
     branches: [main]
     paths:
       - VERSION
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: arx-package-main
+  cancel-in-progress: false
 
 jobs:
   package:
@@ -16,66 +21,78 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Install ARM GCC
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi
+
       - name: Fetch STM32CubeF0
         run: git clone --recursive --depth 1 https://github.com/STMicroelectronics/STM32CubeF0.git "$RUNNER_TEMP/STM32CubeF0"
+
       - name: Build all existing-board images
         shell: bash
         run: |
           set -euo pipefail
           VERSION="$(tr -d '\r\n' < VERSION)"
-          rm -rf "releases/$VERSION"
-          mkdir -p "releases/$VERSION"
-          printf '%s\n' "$GITHUB_SHA" > "releases/$VERSION/SOURCE_COMMIT.txt"
-          arm-none-eabi-gcc --version | head -1 > "releases/$VERSION/TOOLCHAIN.txt"
+          OUT="$RUNNER_TEMP/AlfaRaceX-$VERSION"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+
+          printf '%s\n' "$GITHUB_SHA" > "$OUT/SOURCE_COMMIT.txt"
+          arm-none-eabi-gcc --version | head -1 > "$OUT/TOOLCHAIN.txt"
+
           for ROLE in C1 C2 BH; do
-            BUILD="build-${ROLE}"
-            cmake -S targets/stm32f072_common -B "$BUILD"               -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/cmake/arm-none-eabi-toolchain.cmake"               -DSTM32CUBE_F0_ROOT="$RUNNER_TEMP/STM32CubeF0"               -DARX_ROLE="$ROLE"               -DCMAKE_BUILD_TYPE=Release
+            BUILD="build-$ROLE"
+            cmake -S targets/stm32f072_common -B "$BUILD" \
+              -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/cmake/arm-none-eabi-toolchain.cmake" \
+              -DSTM32CUBE_F0_ROOT="$RUNNER_TEMP/STM32CubeF0" \
+              -DARX_ROLE="$ROLE" \
+              -DCMAKE_BUILD_TYPE=Release
             cmake --build "$BUILD" --parallel
-            cp "$BUILD/arx_${ROLE}.hex" "releases/$VERSION/AlfaRaceX-${ROLE}.hex"
-            cp "$BUILD/arx_${ROLE}.bin" "releases/$VERSION/AlfaRaceX-${ROLE}.bin"
-            arm-none-eabi-size "$BUILD/arx_${ROLE}.elf" > "releases/$VERSION/SIZE-${ROLE}.txt"
+            cp "$BUILD/arx_$ROLE.hex" "$OUT/AlfaRaceX-$ROLE.hex"
+            cp "$BUILD/arx_$ROLE.bin" "$OUT/AlfaRaceX-$ROLE.bin"
+            arm-none-eabi-size "$BUILD/arx_$ROLE.elf" > "$OUT/SIZE-$ROLE.txt"
           done
-          sha256sum "releases/$VERSION/"*.hex "releases/$VERSION/"*.bin             | sed "s#  releases/$VERSION/#  #" > "releases/$VERSION/SHA256SUMS.txt"
-          cp docs/FLASHING.md "releases/$VERSION/FLASHING.md"
-          cp "docs/RELEASE_0.9.0_RC1.md" "releases/$VERSION/RELEASE_NOTES.md"
-          python3 - <<'PY'
-          import hashlib, json, os
-          from pathlib import Path
-          root=Path(".")
-          version=Path("VERSION").read_text().strip()
-          files=[]
-          for p in sorted(root.rglob("*")):
-              if not p.is_file():
-                  continue
-              rel=p.as_posix()
-              if rel.startswith(".git/") or rel.startswith("build-") or rel=="PROJECT_MANIFEST.json":
-                  continue
-              if rel.startswith(f"releases/{version}/"):
-                  continue
-              files.append({
-                  "path": rel,
-                  "bytes": p.stat().st_size,
-                  "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
-              })
-          Path("PROJECT_MANIFEST.json").write_text(json.dumps({
-              "project":"AlfaRaceX-Framework",
-              "baseline":version,
-              "source_commit":os.environ.get("GITHUB_SHA",""),
-              "files":files,
-          },indent=2)+"\n")
-          PY
-      - name: Commit candidate binaries
+
+          sha256sum "$OUT/"*.hex "$OUT/"*.bin | sed "s#  $OUT/#  #" > "$OUT/SHA256SUMS.txt"
+          cp docs/FLASHING.md "$OUT/FLASHING.md"
+          cp docs/HARDWARE_VALIDATION_CHECKLIST.md "$OUT/HARDWARE_VALIDATION_CHECKLIST.md"
+
+          NOTES="docs/RELEASE_1.0.0_RC1.md"
+          if [ -f "$NOTES" ]; then
+            cp "$NOTES" "$OUT/RELEASE_NOTES.md"
+          else
+            printf '# AlfaRaceX %s\n\nSoftware-complete release candidate for the existing board.\n' "$VERSION" > "$OUT/RELEASE_NOTES.md"
+          fi
+
+          (cd "$RUNNER_TEMP" && zip -qr "AlfaRaceX-$VERSION.zip" "AlfaRaceX-$VERSION")
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "OUT=$OUT" >> "$GITHUB_ENV"
+          echo "ZIP=$RUNNER_TEMP/AlfaRaceX-$VERSION.zip" >> "$GITHUB_ENV"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlfaRaceX-${{ env.VERSION }}
+          path: |
+            ${{ env.OUT }}/
+            ${{ env.ZIP }}
+
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="$(tr -d '\r\n' < VERSION)"
-          git config user.name "AlfaRaceX Release Automation"
-          git config user.email "58816127+AriotaG@users.noreply.github.com"
-          git add PROJECT_MANIFEST.json "releases/$VERSION"
-          git add -f "releases/$VERSION/"*.hex "releases/$VERSION/"*.bin
-          git commit -m "release: package AlfaRaceX $VERSION"
-          git push origin HEAD:main
+          TAG="$VERSION"
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" \
+            "$OUT/AlfaRaceX-C1.hex" "$OUT/AlfaRaceX-C1.bin" \
+            "$OUT/AlfaRaceX-C2.hex" "$OUT/AlfaRaceX-C2.bin" \
+            "$OUT/AlfaRaceX-BH.hex" "$OUT/AlfaRaceX-BH.bin" \
+            "$OUT/SHA256SUMS.txt" "$OUT/FLASHING.md" \
+            "$OUT/HARDWARE_VALIDATION_CHECKLIST.md" "$ZIP" \
+            --title "AlfaRaceX $TAG" \
+            --notes-file "$OUT/RELEASE_NOTES.md" \
+            --prerelease
