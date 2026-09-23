@@ -33,6 +33,15 @@ int main(void) {
     assert(ARX_STM32_SYSCLK_HZ==48000000u);
     assert(ARX_STM32_INTERCHIP_BAUD==38400u);
     assert(ARX_STM32_PEDAL_BAUD==9600u);
+    assert(ARX_STM32_CONFIG_SYNC_DELAY_MS==3502u);
+
+    assert(!arx_interchip_start_byte_valid(0x00u));
+    assert(arx_interchip_start_byte_valid(ARX_IC_TO_C1));
+    assert(arx_interchip_start_byte_valid(ARX_IC_TO_C1_C2));
+    assert(arx_interchip_start_byte_valid(0x0Eu));
+    assert(arx_interchip_start_byte_valid(0x0Fu));
+    assert(arx_interchip_start_byte_valid(0x10u));
+    assert(!arx_interchip_start_byte_valid(0x11u));
 
     ArxInterchipFrame f;
     const uint8_t p[]={ARX_IC_TO_C2,ARX_IC_C2_GET_STATUS};
