@@ -40,8 +40,8 @@ logic are represented in ARX and covered by deterministic tests.
 | TX queue | IMPROVED | prioritized queues; dequeue only after success/expiry/retry exhaustion |
 | CAN sniffer | PARITY / TARGET | 16-byte binary records, 256-byte ring, overflow marker, 64-byte chunking and 20 ms partial flush represented; USB lifecycle still target-dependent |
 | ELM-compatible interface | PARITY / TARGET | strict CAN-oriented AT compatibility, USER protocol divisors, filters, Flow Control, ISO-TP SF/FF/CF, route cache and multi-bus transaction core implemented; USB CDC target binding remains |
-| Dashboard menu | PARITY / TARGET | 16-page main menu, 31-page setup menu, skip rules, setup cycles, USB mutual exclusion and 18-character rendering are represented; steering-button-to-menu orchestration still requires target replay validation |
-| Telemetry/UDS parameters | PARITY / TARGET | diesel DPF/AdBlue/EGR/turbo/rail/fuel/MAF/tire/temperature definitions, UDS request builder and exact big-endian scaling decoder implemented; full page-pair schedule replay remains |
+| Dashboard menu | PARITY / TARGET | 16-page main menu, 31-page setup menu, exact 55-page diesel parameter order, paired-value formatting, skip rules, setup cycles, USB mutual exclusion and 18-character rendering are represented; vehicle replay validation remains |
+| Telemetry/UDS parameters | PARITY / TARGET | BACCAble 4.7 diesel page-pair contract, 500 ms active-page UDS scheduler, exact scaling decoder, battery SoC DID 0x19BD and native 0x41A battery current implemented; physical CAN/IPC replay remains |
 | LED strip | PARITY / TARGET | 46-LED patterns, raw pedal scaling, 0.9/0.1 filter, tangent brightness curve and 1,154-word BRG WS2812 encoding implemented; TIM1/DMA binding remains |
 | Flash/settings | PARITY / TARGET | deployed 32-slot settings, four-byte stride, visibility packing, statistics and BH mirror layouts supported through a testable backend; STM32 HAL backend added |
 | Low-consume/wakeup | PARITY / TARGET | 3500/3400 ms timing, sleep blockers, UART pause/resume and PA4/PA5 action contract represented |
