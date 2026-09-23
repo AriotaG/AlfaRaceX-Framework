@@ -45,7 +45,7 @@ internal sealed class DfuDevice : IDisposable
             WinUsbNative.FileShareRead | WinUsbNative.FileShareWrite,
             IntPtr.Zero,
             WinUsbNative.OpenExisting,
-            WinUsbNative.FileAttributeNormal,
+            WinUsbNative.FileAttributeNormal | WinUsbNative.FileFlagOverlapped,
             IntPtr.Zero);
 
         if (file.IsInvalid)
