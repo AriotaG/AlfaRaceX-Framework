@@ -114,12 +114,9 @@ static int8_t cdc_receive(uint8_t *buf,uint32_t *length){
     (void)USBD_CDC_ReceivePacket(&usb_device);
     return (int8_t)USBD_OK;
 }
-static int8_t cdc_tx_complete(uint8_t *buf,uint32_t *length,uint8_t epnum){
-    (void)buf;(void)length;(void)epnum;return (int8_t)USBD_OK;
-}
 static USBD_CDC_ItfTypeDef cdc_ops={
     .Init=cdc_init,.DeInit=cdc_deinit,.Control=cdc_control,
-    .Receive=cdc_receive,.TransmitCplt=cdc_tx_complete
+    .Receive=cdc_receive
 };
 
 void *arx_usbd_static_malloc(uint32_t size){
@@ -189,8 +186,8 @@ USBD_StatusTypeDef USBD_LL_StallEP(USBD_HandleTypeDef *pdev,uint8_t ep){return H
 USBD_StatusTypeDef USBD_LL_ClearStallEP(USBD_HandleTypeDef *pdev,uint8_t ep){return HAL_PCD_EP_ClrStall((PCD_HandleTypeDef*)pdev->pData,ep)==HAL_OK?USBD_OK:USBD_FAIL;}
 uint8_t USBD_LL_IsStallEP(USBD_HandleTypeDef *pdev,uint8_t ep){PCD_HandleTypeDef *h=(PCD_HandleTypeDef*)pdev->pData;return (ep&0x80u)?h->IN_ep[ep&0x7Fu].is_stall:h->OUT_ep[ep&0x7Fu].is_stall;}
 USBD_StatusTypeDef USBD_LL_SetUSBAddress(USBD_HandleTypeDef *pdev,uint8_t addr){return HAL_PCD_SetAddress((PCD_HandleTypeDef*)pdev->pData,addr)==HAL_OK?USBD_OK:USBD_FAIL;}
-USBD_StatusTypeDef USBD_LL_Transmit(USBD_HandleTypeDef *pdev,uint8_t ep,uint8_t *buf,uint32_t size){return HAL_PCD_EP_Transmit((PCD_HandleTypeDef*)pdev->pData,ep,buf,size)==HAL_OK?USBD_OK:USBD_FAIL;}
-USBD_StatusTypeDef USBD_LL_PrepareReceive(USBD_HandleTypeDef *pdev,uint8_t ep,uint8_t *buf,uint32_t size){return HAL_PCD_EP_Receive((PCD_HandleTypeDef*)pdev->pData,ep,buf,size)==HAL_OK?USBD_OK:USBD_FAIL;}
+USBD_StatusTypeDef USBD_LL_Transmit(USBD_HandleTypeDef *pdev,uint8_t ep,uint8_t *buf,uint16_t size){return HAL_PCD_EP_Transmit((PCD_HandleTypeDef*)pdev->pData,ep,buf,size)==HAL_OK?USBD_OK:USBD_FAIL;}
+USBD_StatusTypeDef USBD_LL_PrepareReceive(USBD_HandleTypeDef *pdev,uint8_t ep,uint8_t *buf,uint16_t size){return HAL_PCD_EP_Receive((PCD_HandleTypeDef*)pdev->pData,ep,buf,size)==HAL_OK?USBD_OK:USBD_FAIL;}
 uint32_t USBD_LL_GetRxDataSize(USBD_HandleTypeDef *pdev,uint8_t ep){return HAL_PCD_EP_GetRxCount((PCD_HandleTypeDef*)pdev->pData,ep);}
 void USBD_LL_Delay(uint32_t delay){HAL_Delay(delay);}
 
