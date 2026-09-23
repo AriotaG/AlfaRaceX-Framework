@@ -1,0 +1,2 @@
+   text	   data	    bss	    dec	    hex	filename
+  52260	    368	  12032	  64660	   fc94	build-C1/arx_C1.elf

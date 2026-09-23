@@ -1,0 +1,2 @@
+   text	   data	    bss	    dec	    hex	filename
+  38148	    368	  12032	  50548	   c574	build-BH/arx_BH.elf

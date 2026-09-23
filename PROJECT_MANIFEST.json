@@ -1,12 +1,17 @@
 {
   "project": "AlfaRaceX-Framework",
-  "baseline": "0.8.0-dev",
-  "generated": "2026-09-23",
+  "baseline": "0.9.0-rc1",
+  "source_commit": "45bf7bc8745ee499bc1dfa26fcaf3578221e258e",
   "files": [
     {
       "path": ".github/workflows/ci.yml",
-      "bytes": 1967,
-      "sha256": "c2fe3e30f7898ad179ebfaa87a612dc7f296d8d094c1d14048db5b4bbec33abb"
+      "bytes": 2637,
+      "sha256": "18e58e32edb596323ff43e2d87c90c7aadfaf7185d92e5c4c47f052fe4cd4717"
+    },
+    {
+      "path": ".github/workflows/package-candidate.yml",
+      "bytes": 3366,
+      "sha256": "0ee94d20a3dda24f34151ae2f0a642a5b0fa7ea210e1f156f6f74b8e44434c1e"
     },
     {
       "path": ".gitignore",
@@ -30,13 +35,13 @@
     },
     {
       "path": "README.md",
-      "bytes": 6107,
-      "sha256": "f521c3607d06863520cc2165d3b4eaca271157b142ccfdb05fbc995e5613ca77"
+      "bytes": 6700,
+      "sha256": "e32641fd9fb8636bc0ed294bf5ef57cd293d88357e4a4c08725c84d232ada0d0"
     },
     {
       "path": "VERSION",
       "bytes": 10,
-      "sha256": "2093ec1b71a6af4aca141c12a33f60a59caf181cab2fdb75299d925fa6bc2836"
+      "sha256": "a559683954ce919a38c106e6c4d8225731114d1657e19bdea1891094ede7e906"
     },
     {
       "path": "cmake/arm-none-eabi-toolchain.cmake",
@@ -99,6 +104,11 @@
       "sha256": "a7753204335b0d3c00e566fc018da031aa27c6b900dd0a8a6261fc2737dc489f"
     },
     {
+      "path": "docs/FLASHING.md",
+      "bytes": 2049,
+      "sha256": "31d460ca19c460376f6cfce3fdb39c4157ea7edfaac6a3a5cdb083d1473665c1"
+    },
+    {
       "path": "docs/FLASH_MEMORY_REQUIREMENT.md",
       "bytes": 745,
       "sha256": "03502fc361127a72bdd46dca9862b88799f5ee0761d15e963a8cd41819b17043"
@@ -107,6 +117,11 @@
       "path": "docs/FUNCTION_AUDIT.md",
       "bytes": 6265,
       "sha256": "63854f5253de01c5fd20cdc646e7822f2eac62e2b52b6dcab3d8afc3af7b09a0"
+    },
+    {
+      "path": "docs/HARDWARE_VALIDATION_CHECKLIST.md",
+      "bytes": 2244,
+      "sha256": "d5c16e8a5d08dc3eff70b876c131b2f7230f1556e24d6683625231f9ff9c547a"
     },
     {
       "path": "docs/INFRASTRUCTURE_PROTOCOLS.md",
@@ -149,9 +164,14 @@
       "sha256": "91ed758983b99717062290b9443d7968759cda152b796be8fdeecbec3af796cd"
     },
     {
+      "path": "docs/RELEASE_0.9.0_RC1.md",
+      "bytes": 1368,
+      "sha256": "dc34cceae2967831de0e0afed18e0df085585911ffb7bca02f929d9aaaa6a439"
+    },
+    {
       "path": "docs/REPLACEMENT_GATE.md",
-      "bytes": 1809,
-      "sha256": "517a09fcfabdd162c010fb21698c0826cb64f83d3107cf475a8aafb1e0db2814"
+      "bytes": 2131,
+      "sha256": "63e766b86c83e4fe1312f9b6920d9a2978161a3ad72ae9dd37cb9bdb8924adce"
     },
     {
       "path": "docs/ROADMAP.md",
@@ -470,8 +490,8 @@
     },
     {
       "path": "src/core/arx_runtime.c",
-      "bytes": 40925,
-      "sha256": "19f3f459efcf8c3f23afa49b0330eab7901ecae07f4098e21a8247f2877a2c38"
+      "bytes": 41021,
+      "sha256": "27943c64d207f4ec5c6d2b0cbff989860258287a081bf3c957bff854cabec2b3"
     },
     {
       "path": "src/core/arx_sgw.c",
@@ -655,8 +675,8 @@
     },
     {
       "path": "targets/stm32f072_common/CMakeLists.txt",
-      "bytes": 3784,
-      "sha256": "15566679cb021014fd72491cf269335b533df0b946065ed3f64fe3c0b53264be"
+      "bytes": 4048,
+      "sha256": "6f16a57cebcd3dea8130643d06b195b3fe06b55192c5ad5f93af769bb8f0346a"
     },
     {
       "path": "targets/stm32f072_common/hardware.json",
@@ -720,8 +740,8 @@
     },
     {
       "path": "targets/stm32f072_common/src/arx_stm32f072_irq.c",
-      "bytes": 872,
-      "sha256": "c1253626a345715caebc94c276a76eb8c5f818c2d2e4079afb8957a01ae90e64"
+      "bytes": 952,
+      "sha256": "1275e13f6f17b33b65cc0b2d1099a5aa5db0f715c484dd11129e2690ae478290"
     },
     {
       "path": "targets/stm32f072_common/src/arx_stm32f072_led.c",
@@ -745,8 +765,8 @@
     },
     {
       "path": "targets/stm32f072_common/src/arx_stm32f072_usb.c",
-      "bytes": 12001,
-      "sha256": "0a6c261799c1746c79ce1c2db4bf4853718109b267c2468723ad8f25fab132c3"
+      "bytes": 11830,
+      "sha256": "0484ed28f974e83be78c3f20e3a9e84c5f6b9618022786bfdcbf0e8c8d084719"
     },
     {
       "path": "targets/stm32f072_common/src/main.c",

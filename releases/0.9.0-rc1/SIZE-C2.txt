@@ -1,0 +1,2 @@
+   text	   data	    bss	    dec	    hex	filename
+  38668	    368	  12032	  51068	   c77c	build-C2/arx_C2.elf
