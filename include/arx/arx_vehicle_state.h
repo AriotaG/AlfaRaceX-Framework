@@ -36,7 +36,9 @@ enum {
     ARX_VS_ACC          = 1u << 9,
     ARX_VS_START_STOP   = 1u << 10,
     ARX_VS_BRAKE_CTRL   = 1u << 11,
-    ARX_VS_TURN         = 1u << 12
+    ARX_VS_TURN         = 1u << 12,
+    ARX_VS_BATTERY_SOC  = 1u << 13,
+    ARX_VS_BATTERY_CURR = 1u << 14
 };
 
 typedef struct {
@@ -47,6 +49,8 @@ typedef struct {
     float coolant_temperature_c;
     float gearbox_temperature_c;
     float vehicle_speed_kmh;
+    float battery_soc_percent;
+    float battery_current_a;
 
     int16_t engine_torque_nm;
     uint16_t engine_rpm;
