@@ -168,6 +168,188 @@ static void runtime_bind_preferences(ArxRuntime *rt,uint32_t now_ms,bool apply_u
 }
 
 #if ARX_COMPILE_C1
+static bool menu_render(ArxRuntime *rt);
+
+static bool telemetry_definition_index(
+    const char *key,
+    const ArxTelemetryDefinition **definition,
+    size_t *index
+) {
+    size_t count=0u;
+    const ArxTelemetryDefinition *db=arx_telemetry_diesel(&count);
+    const ArxTelemetryDefinition *d=arx_telemetry_find(db,count,key);
+    if(!d)return false;
+    const size_t i=(size_t)(d-db);
+    if(i>=ARX_RUNTIME_TELEMETRY_CACHE_MAX)return false;
+    if(definition)*definition=d;
+    if(index)*index=i;
+    return true;
+}
+
+static bool telemetry_native_value(
+    const ArxRuntime *rt,
+    const char *key,
+    float *value
+) {
+    if(!rt||!key||!value)return false;
+
+    if(!strcmp(key,"oil_pressure")){
+        if(!(rt->vehicle.valid_mask&ARX_VS_OIL_PRESSURE))return false;
+        *value=rt->vehicle.oil_pressure_bar;return true;
+    }
+    if(!strcmp(key,"engine_power")){
+        if((rt->vehicle.valid_mask&(ARX_VS_ENGINE_RPM|ARX_VS_TORQUE))!=(ARX_VS_ENGINE_RPM|ARX_VS_TORQUE))
+            return false;
+        *value=(float)rt->vehicle.engine_torque_nm*(float)rt->vehicle.engine_rpm*0.000142378f;
+        return true;
+    }
+    if(!strcmp(key,"engine_torque")){
+        if(!(rt->vehicle.valid_mask&ARX_VS_TORQUE))return false;
+        *value=(float)rt->vehicle.engine_torque_nm;return true;
+    }
+    if(!strcmp(key,"oil_temperature")){
+        if(!(rt->vehicle.valid_mask&ARX_VS_OIL_TEMP))return false;
+        *value=rt->vehicle.oil_temperature_c;return true;
+    }
+    if(!strcmp(key,"gear")){
+        if(!(rt->vehicle.valid_mask&ARX_VS_GEAR))return false;
+        *value=(float)rt->vehicle.current_gear;return true;
+    }
+    if(!strcmp(key,"speed")){
+        if(!(rt->vehicle.valid_mask&ARX_VS_SPEED))return false;
+        *value=rt->vehicle.vehicle_speed_kmh;return true;
+    }
+    if(!strcmp(key,"dpf_regen_mode")){
+        *value=(float)rt->dpf.last_regen_mode;return true;
+    }
+    if(!strcmp(key,"battery_current")){
+        if(!(rt->vehicle.valid_mask&ARX_VS_BATTERY_CURR))return false;
+        *value=rt->vehicle.battery_current_a;return true;
+    }
+    if(!strcmp(key,"seatbelt_alarm")){
+        if(rt->seatbelt.state==ARX_SEATBELT_ENABLED){*value=0.0f;return true;}
+        if(rt->seatbelt.state==ARX_SEATBELT_DISABLED){*value=1.0f;return true;}
+        return false;
+    }
+    if(!strcmp(key,"performance_0_100")){
+        *value=rt->performance.zero_to_100_s;return true;
+    }
+    if(!strcmp(key,"performance_100_200")){
+        *value=rt->performance.hundred_to_200_s;return true;
+    }
+    if(!strcmp(key,"best_0_100")){
+        *value=rt->performance.best_zero_to_100_s;return true;
+    }
+    if(!strcmp(key,"best_100_200")){
+        *value=rt->performance.best_hundred_to_200_s;return true;
+    }
+    if(!strcmp(key,"dna_mode")){
+        if(!(rt->vehicle.valid_mask&ARX_VS_DNA))return false;
+        *value=(float)rt->vehicle.dna_mode;return true;
+    }
+    if(!strcmp(key,"pedal_map")){
+        if(rt->pedal.applied_map==ARX_PEDAL_MAP_UNKNOWN)return false;
+        *value=(float)rt->pedal.applied_map;return true;
+    }
+    return false;
+}
+
+static bool telemetry_value(ArxRuntime *rt,const char *key,float *value) {
+    const ArxTelemetryDefinition *d=0;
+    size_t index=0u;
+    if(!rt||!key||!value||!telemetry_definition_index(key,&d,&index))return false;
+
+    if(d->source==ARX_SIGNAL_UDS){
+        if(rt->telemetry_valid[index]){
+            *value=rt->telemetry_values[index];
+            return true;
+        }
+        /* BACCAble uses UDS 0x19BD as the diesel SoC source, but retain the
+           native 0x41A value as a startup fallback until the first UDS reply. */
+        if(!strcmp(key,"battery_soc")&&(rt->vehicle.valid_mask&ARX_VS_BATTERY_SOC)){
+            *value=rt->vehicle.battery_soc_percent;
+            return true;
+        }
+        return false;
+    }
+    return telemetry_native_value(rt,key,value);
+}
+
+static bool telemetry_render_current_page(ArxRuntime *rt,char text[ARX_MENU_TEXT_LEN+1u]) {
+    size_t count=0u;
+    const ArxTelemetryPage *pages=arx_telemetry_diesel_pages(&count);
+    if(!rt||!text||count==0u)return false;
+    const ArxTelemetryPage *p=&pages[(size_t)rt->menu.param_page%count];
+    float a=0.0f,b=0.0f;
+    const bool av=telemetry_value(rt,p->primary_key,&a);
+    const bool bv=!strcmp(p->primary_key,p->secondary_key)
+        ?av:telemetry_value(rt,p->secondary_key,&b);
+    if(!strcmp(p->primary_key,p->secondary_key))b=a;
+    return arx_telemetry_format_page(p,a,av,b,bv,text);
+}
+
+static void telemetry_accept_response(
+    ArxRuntime *rt,
+    const ArxCanFrame *frame
+) {
+    if(!rt||!frame||!frame->extended_id||!rt->config.diesel_profile)return;
+
+    size_t page_count=0u;
+    const ArxTelemetryPage *pages=arx_telemetry_diesel_pages(&page_count);
+    if(!page_count)return;
+    const ArxTelemetryPage *p=&pages[(size_t)rt->menu.param_page%page_count];
+    const char *keys[2]={p->primary_key,p->secondary_key};
+    bool updated=false;
+
+    for(unsigned slot=0u;slot<2u;slot++){
+        if(slot==1u&&!strcmp(keys[0],keys[1]))break;
+        const ArxTelemetryDefinition *d=0;
+        size_t index=0u;
+        if(!telemetry_definition_index(keys[slot],&d,&index)||d->source!=ARX_SIGNAL_UDS)
+            continue;
+        float value=0.0f;
+        if(arx_telemetry_decode_response(d,frame,&value)){
+            rt->telemetry_values[index]=value;
+            rt->telemetry_valid[index]=1u;
+            updated=true;
+        }
+    }
+    if(updated&&rt->menu.visible&&rt->menu.level==ARX_MENU_LEVEL_SUB&&
+       rt->menu.main_page==1u)
+        (void)menu_render(rt);
+}
+
+static void telemetry_poll_current_page(ArxRuntime *rt,uint32_t now_ms) {
+    if(!rt||!rt->config.diesel_profile||!rt->menu.visible||
+       rt->menu.level!=ARX_MENU_LEVEL_SUB||rt->menu.main_page!=1u)return;
+    if(rt->telemetry_last_poll_ms&&now_ms-rt->telemetry_last_poll_ms<500u)return;
+    rt->telemetry_last_poll_ms=now_ms;
+
+    size_t page_count=0u;
+    const ArxTelemetryPage *pages=arx_telemetry_diesel_pages(&page_count);
+    if(!page_count)return;
+    const ArxTelemetryPage *p=&pages[(size_t)rt->menu.param_page%page_count];
+
+    unsigned slot=rt->telemetry_poll_slot&1u;
+    if(!strcmp(p->primary_key,p->secondary_key))slot=0u;
+    const char *key=slot?p->secondary_key:p->primary_key;
+
+    const ArxTelemetryDefinition *d=0;
+    size_t index=0u;
+    if(telemetry_definition_index(key,&d,&index)&&d->source==ARX_SIGNAL_UDS){
+        ArxCanFrame request;
+        if(arx_telemetry_build_request(d,ARX_BUS_C1,now_ms,&request))
+            (void)enqueue_can(rt,&request,ARX_PRIORITY_LOW,now_ms);
+    }
+
+    if(strcmp(p->primary_key,p->secondary_key))
+        rt->telemetry_poll_slot^=1u;
+    else
+        rt->telemetry_poll_slot=0u;
+
+    (void)menu_render(rt);
+}
+
 static bool menu_send_text(ArxRuntime *rt,const char text[ARX_MENU_TEXT_LEN+1u]) {
     if(!rt||rt->role!=ARX_RUNTIME_C1||!text)return false;
     uint8_t p[ARX_INTERCHIP_FRAME_SIZE];
@@ -221,12 +403,11 @@ static bool menu_render(ArxRuntime *rt) {
     }
 
     if(rt->menu.main_page==1u){
-        size_t count=0u;const ArxTelemetryPage *pages=arx_telemetry_diesel_pages(&count);
-        if(count){
-            const size_t i=(size_t)rt->menu.param_page%count;
-            const char *title=pages[i].title;
-            size_t n=strlen(title);if(n>ARX_MENU_TEXT_LEN)n=ARX_MENU_TEXT_LEN;
-            memcpy(text,title,n);
+        if(rt->config.diesel_profile)
+            (void)telemetry_render_current_page(rt,text);
+        else{
+            const char *x="Gasoline pending";
+            memcpy(text,x,strlen(x));
         }
         return menu_send_text(rt,text);
     }
@@ -582,6 +763,9 @@ void arx_runtime_on_can(
             if(arx_seatbelt_on_response(&rt->seatbelt,frame,now_ms,&out))
                 (void)enqueue_can(rt,&out,ARX_PRIORITY_HIGH,now_ms);
         }
+
+        if(frame->extended_id)
+            telemetry_accept_response(rt,frame);
 
         (void)arx_immobilizer_observe(
             &rt->immobilizer,frame,engine_running_long_enough(rt,now_ms),now_ms
@@ -945,6 +1129,7 @@ void arx_runtime_queue_config_sync(ArxRuntime *rt) {
 static void periodic_c1(ArxRuntime *rt,uint32_t now_ms) {
     ArxCanFrame out;
     menu_engine_visibility(rt,now_ms);
+    telemetry_poll_current_page(rt,now_ms);
 
     if(rt->template_4b1_valid&&arx_start_stop_should_toggle(&rt->start_stop,now_ms)){
         if(arx_start_stop_build_toggle(&rt->template_4b1,&out)){
