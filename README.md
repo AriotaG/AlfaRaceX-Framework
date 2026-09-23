@@ -28,7 +28,7 @@ ZF 8-speed automatic transmission.
 
 ## Current baseline
 
-The current release candidate is **1.0.0-rc3**. It is targeted at the existing
+The current release candidate is **1.0.0-rc4**. It is targeted at the existing
 three-controller STM32F072 hardware and currently includes:
 
 - C1 / C2 / BH runtime orchestration
@@ -46,7 +46,7 @@ three-controller STM32F072 hardware and currently includes:
 - Debug/Release host regression gates and Cortex-M0 object compilation
 - firmware size-gate tooling for the existing board memory map
 
-The project is **software-complete for the reference MY20 diesel hardware target**, with C1/C2/BH ARM images linked and memory-gated. The 1.0.0-rc3 validation scope is the reference Stelvio MY20 diesel profile. Promotion to **1.0.0 Stable** still requires the physical validation checklist on the existing board and vehicle.
+The project is **software-complete for the reference MY20 diesel hardware target**, with C1/C2/BH ARM images linked and memory-gated. The 1.0.0-rc4 validation scope is the reference Stelvio MY20 diesel profile. Promotion to **1.0.0 Stable** still requires the physical validation checklist on the existing board and vehicle.
 
 ## Project principles
 
@@ -174,6 +174,6 @@ against STM32CubeF0 on GitHub Actions, and all existing-board Flash/RAM budget g
 pass.
 
 Debug, Release, AddressSanitizer/UndefinedBehaviorSanitizer, Cortex-M0 compilation
-and C1/C2/BH image gates are green. The diesel reference candidate is `1.0.0-rc3`;
+and C1/C2/BH image gates are green. The diesel reference candidate is `1.0.0-rc4`;
 final `1.0.0` requires the physical existing-board validation checklist in
 [`docs/HARDWARE_VALIDATION_CHECKLIST.md`](docs/HARDWARE_VALIDATION_CHECKLIST.md).

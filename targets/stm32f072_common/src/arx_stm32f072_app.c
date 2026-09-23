@@ -17,9 +17,55 @@ extern UART_HandleTypeDef *arx_stm32_pedal_uart_handle(void);
 static ArxRuntime runtime_ctx;
 static ArxTargetRole target_role;
 static uint8_t uart2_rx[ARX_INTERCHIP_FRAME_SIZE];
+static bool uart2_sync_obtained;
 static uint8_t pedal_rx_byte;
 static uint16_t ws2812_pwm[ARX_WS2812_PWM_WORDS];
 static ArxStorageBackend target_storage;
+static bool config_sync_pending;
+static uint32_t config_sync_due_ms;
+
+static bool time_reached(uint32_t now_ms,uint32_t due_ms) {
+    return (int32_t)(now_ms-due_ms)>=0;
+}
+
+static void interchip_rx_arm_search(void) {
+    UART_HandleTypeDef *u=arx_stm32_interchip_uart_handle();
+    uart2_sync_obtained=false;
+    if(u)(void)HAL_UART_Receive_IT(u,&uart2_rx[0],1u);
+}
+
+static void schedule_config_sync(uint32_t now_ms) {
+    if(target_role!=ARX_TARGET_ROLE_C1)return;
+    config_sync_pending=true;
+    config_sync_due_ms=now_ms+ARX_STM32_CONFIG_SYNC_DELAY_MS;
+}
+
+static bool halfduplex_send(
+    UART_HandleTypeDef *u,
+    const uint8_t *data,
+    uint16_t length,
+    uint32_t timeout_ms
+) {
+    if(!u||!data||length==0u)return false;
+
+    /*
+     * The deployed firmware never leaves RX armed while driving the
+     * single-wire half-duplex line. Abort the receive transaction first,
+     * switch direction explicitly, transmit, then return to RX.
+     */
+    (void)HAL_UART_AbortReceive(u);
+    if(HAL_HalfDuplex_EnableTransmitter(u)!=HAL_OK){
+        (void)HAL_HalfDuplex_EnableReceiver(u);
+        return false;
+    }
+
+    const HAL_StatusTypeDef tx=HAL_UART_Transmit(
+        u,(uint8_t*)data,length,timeout_ms
+    );
+
+    const HAL_StatusTypeDef rx=HAL_HalfDuplex_EnableReceiver(u);
+    return tx==HAL_OK&&rx==HAL_OK;
+}
 
 static void power_uart_pause(void *user) {
     (void)user;
@@ -29,8 +75,7 @@ static void power_uart_pause(void *user) {
 
 static void power_uart_resume(void *user) {
     (void)user;
-    UART_HandleTypeDef *u=arx_stm32_interchip_uart_handle();
-    if(u) (void)HAL_UART_Receive_IT(u,uart2_rx,ARX_INTERCHIP_FRAME_SIZE);
+    interchip_rx_arm_search();
 }
 
 static void power_reset(bool asserted,void *user) {
@@ -47,7 +92,7 @@ static void power_wake_reconfigure(void *user) {
     (void)user;
     runtime_ctx.remote_dyno_active=false;
     runtime_ctx.remote_brake_forced=false;
-    arx_runtime_queue_config_sync(&runtime_ctx);
+    schedule_config_sync(HAL_GetTick());
 }
 
 static const ArxPowerOps power_ops={
@@ -84,20 +129,27 @@ static ArxStatus can_sender(const ArxCanFrame *f,void *user) {
 static bool interchip_sender(const uint8_t frame[ARX_INTERCHIP_FRAME_SIZE],void *user) {
     (void)user;
     UART_HandleTypeDef *u=arx_stm32_interchip_uart_handle();
-    if(!u)return false;
-    return HAL_UART_Transmit(
-        u,(uint8_t*)frame,ARX_INTERCHIP_FRAME_SIZE,20u
-    )==HAL_OK;
+    if(!halfduplex_send(u,frame,ARX_INTERCHIP_FRAME_SIZE,20u)){
+        interchip_rx_arm_search();
+        return false;
+    }
+
+    /* Any local transmission invalidates a partial receive. Reacquire the
+       next frame from its first destination byte, as the deployed firmware. */
+    interchip_rx_arm_search();
+    return true;
 }
 
 static bool pedal_sender(const uint8_t packet[ARX_PEDAL_PACKET_SIZE],void *user) {
     (void)user;
     if(target_role!=ARX_TARGET_ROLE_C1)return false;
     UART_HandleTypeDef *u=arx_stm32_pedal_uart_handle();
-    if(!u)return false;
-    return HAL_UART_Transmit(
-        u,(uint8_t*)packet,ARX_PEDAL_PACKET_SIZE,20u
-    )==HAL_OK;
+    if(!halfduplex_send(u,packet,ARX_PEDAL_PACKET_SIZE,20u)){
+        if(u)(void)HAL_UART_Receive_IT(u,&pedal_rx_byte,1u);
+        return false;
+    }
+    if(u)(void)HAL_UART_Receive_IT(u,&pedal_rx_byte,1u);
+    return true;
 }
 
 static bool usb_attach_cb(ArxUsbMode mode,void *user) {
@@ -202,8 +254,11 @@ void arx_stm32f072_app_init(ArxTargetRole role) {
             runtime_ctx.performance.best_hundred_to_200_s=best_100_200;
         runtime_ctx.performance.best_dirty=false;
 
-        /* Synchronize the effective C1 configuration, after Flash has been read. */
-        arx_runtime_queue_config_sync(&runtime_ctx);
+        /*
+         * Preserve the deployed timing: slaves receive the effective C1
+         * configuration only after their ~3.5 s startup/wake settling window.
+         */
+        schedule_config_sync(HAL_GetTick());
     }
 
     if(role==ARX_TARGET_ROLE_BH){
@@ -228,10 +283,7 @@ void arx_stm32f072_app_init(ArxTargetRole role) {
         }
     }
 
-    HAL_UART_Receive_IT(
-        arx_stm32_interchip_uart_handle(),
-        uart2_rx,ARX_INTERCHIP_FRAME_SIZE
-    );
+    interchip_rx_arm_search();
     if(role==ARX_TARGET_ROLE_C1){
         HAL_UART_Receive_IT(
             arx_stm32_pedal_uart_handle(),
@@ -275,15 +327,48 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     if(huart==arx_stm32_interchip_uart_handle()){
+        if(!uart2_sync_obtained){
+            if(arx_interchip_start_byte_valid(uart2_rx[0])){
+                uart2_sync_obtained=true;
+                (void)HAL_UART_Receive_IT(
+                    huart,&uart2_rx[1],ARX_INTERCHIP_FRAME_SIZE-1u
+                );
+            }else{
+                interchip_rx_arm_search();
+            }
+            return;
+        }
+
+        if(!arx_interchip_start_byte_valid(uart2_rx[0])){
+            interchip_rx_arm_search();
+            return;
+        }
+
         arx_stm32f072_interchip_rx(uart2_rx);
-        HAL_UART_Receive_IT(huart,uart2_rx,ARX_INTERCHIP_FRAME_SIZE);
+        (void)HAL_UART_Receive_IT(
+            huart,uart2_rx,ARX_INTERCHIP_FRAME_SIZE
+        );
         return;
     }
 
     if(target_role==ARX_TARGET_ROLE_C1&&
        huart==arx_stm32_pedal_uart_handle()){
         arx_stm32f072_pedal_rx(pedal_rx_byte);
-        HAL_UART_Receive_IT(huart,&pedal_rx_byte,1u);
+        (void)HAL_UART_Receive_IT(huart,&pedal_rx_byte,1u);
+    }
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+    if(huart==arx_stm32_interchip_uart_handle()){
+        (void)HAL_HalfDuplex_EnableReceiver(huart);
+        interchip_rx_arm_search();
+        return;
+    }
+
+    if(target_role==ARX_TARGET_ROLE_C1&&
+       huart==arx_stm32_pedal_uart_handle()){
+        (void)HAL_HalfDuplex_EnableReceiver(huart);
+        (void)HAL_UART_Receive_IT(huart,&pedal_rx_byte,1u);
     }
 }
 
@@ -312,6 +397,14 @@ void arx_stm32f072_app_loop(void) {
         }else{
             (void)arx_power_wake_if_needed(&runtime_ctx.power,now,&power_ops);
         }
+    }
+
+    if(target_role==ARX_TARGET_ROLE_C1&&
+       config_sync_pending&&
+       runtime_ctx.power.state==ARX_POWER_AWAKE&&
+       time_reached(now,config_sync_due_ms)){
+        config_sync_pending=false;
+        arx_runtime_queue_config_sync(&runtime_ctx);
     }
 
     arx_runtime_tick(&runtime_ctx,now);

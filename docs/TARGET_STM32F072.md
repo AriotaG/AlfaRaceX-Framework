@@ -46,6 +46,14 @@ The USB peripheral clock is also sourced from HSI48.
 The C1 controller is master and normally sends at most one block every 250 ms.
 C2/BH send replies only inside the 200 ms response window opened by a master request.
 
+The physical UART receiver follows the deployed framing behavior: it acquires a
+valid destination byte first, then completes the 19-byte block. Invalid start bytes,
+UART errors, local half-duplex transmissions and wake events force a byte-wise
+re-synchronization instead of assuming the stream is still frame-aligned.
+
+C1 waits 3502 ms after boot or slave wake before synchronizing the persisted feature
+configuration to C2/BH, matching the deployed settling interval.
+
 ## Pedal UART
 
 ARX-C1 additionally provides:
