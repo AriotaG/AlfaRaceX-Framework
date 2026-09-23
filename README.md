@@ -28,7 +28,7 @@ ZF 8-speed automatic transmission.
 
 ## Current baseline
 
-The current release candidate is **0.9.0-rc1**. It is targeted at the existing
+The current release candidate is **1.0.0-rc1**. It is targeted at the existing
 three-controller STM32F072 hardware and currently includes:
 
 - C1 / C2 / BH runtime orchestration
@@ -169,7 +169,7 @@ mandatory gate, and role-specific firmware-size checks enforce the existing-boar
 Flash/RAM limits. See `docs/RELEASE_0.8.0_DEV.md`.
 
 
-## 0.9 release candidate
+## 1.0 release candidate
 
 The three STM32F072 role images now build and link with the real ARM GCC toolchain
 against STM32CubeF0 on GitHub Actions. All existing-board memory gates pass:
@@ -179,6 +179,6 @@ against STM32CubeF0 on GitHub Actions. All existing-board memory gates pass:
 - BH: 38,516 B Flash / 12,400 B RAM
 
 Debug, Release, AddressSanitizer/UndefinedBehaviorSanitizer and Cortex-M0 compilation
-gates are green. The next promotion is `0.9.0-rc1`; final `1.0.0` requires the
+gates are green. The software-complete candidate is `1.0.0-rc1`; final `1.0.0` requires the
 physical existing-board validation checklist in
 [`docs/HARDWARE_VALIDATION_CHECKLIST.md`](docs/HARDWARE_VALIDATION_CHECKLIST.md).
