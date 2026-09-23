@@ -1,6 +1,10 @@
 #include "arx/arx_interchip.h"
 #include <string.h>
 
+bool arx_interchip_start_byte_valid(uint8_t value) {
+    return value >= ARX_IC_TO_C1 && value <= ARX_INTERCHIP_LAST_WIRE_DEST;
+}
+
 void arx_interchip_init(ArxInterchip *link, ArxInterchipRole role) {
     if (!link) return;
     memset(link, 0, sizeof(*link));
