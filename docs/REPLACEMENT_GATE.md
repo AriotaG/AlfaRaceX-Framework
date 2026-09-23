@@ -6,27 +6,27 @@ below is green.
 | Gate | Current status |
 |---|---|
 | Portable core compiles with warnings enabled | PASS |
-| Function-by-function behavior audit | IN PROGRESS |
+| Function-by-function behavior audit | AUTOMATED PARITY COMPLETE; hardware replay/vehicle validation pending |
 | C1/C2/BH hardware profiles | PASS |
 | CAN timing/pins | PASS |
 | Inter-controller 19-byte protocol | PASS (portable layer) |
 | Pedal UART protocol | PASS (portable layer) |
 | Low-consume timing and power-control contract | PASS (portable layer) |
-| STM32F072 HAL initialization source | IMPLEMENTED, cross-build pending |
+| STM32F072 HAL initialization source | PASS — ARM GCC linked for C1/C2/BH |
 | Runtime C1/C2/BH orchestration | PASS (host tested) |
-| STM32 CAN/UART callback glue | IMPLEMENTED, cross-build pending |
+| STM32 CAN/UART callback glue | PASS — ARM GCC linked for C1/C2/BH |
 | Existing-board linker budgets (C1 96 KiB, C2/BH 60 KiB) | PASS |
 | Flash/settings compatibility layer | PASS (portable + HAL backend source) |
-| Boot-time persistent configuration load | IMPLEMENTED; cross-build pending |
-| Exact dashboard/menu behavior | PORTABLE PARITY; target replay validation pending |
-| Full telemetry/UDS parameter set | DIESEL PARITY; page scheduler replay pending |
-| Sniffer binary data path | PASS (portable layer); USB lifecycle pending |
-| Complete ELM-compatible bridge | PASS (portable transaction core); USB target binding pending |
-| WS2812 exact data path | PASS (renderer + PWM encoder); TIM1/DMA target start/callback pending |
-| USB CDC/MSC target | PENDING |
-| ARM cross-build C1 | PENDING |
-| ARM cross-build C2 | PENDING |
-| ARM cross-build BH | PENDING |
+| Boot-time persistent configuration load | PASS — compiled into target images |
+| Exact dashboard/menu behavior | PORTABLE PARITY; target build PASS; vehicle replay validation pending |
+| Full telemetry/UDS parameter set | DIESEL PARITY; target build PASS; page scheduler replay pending |
+| Sniffer binary data path | PASS — USB target compiles/links; hardware USB lifecycle validation pending |
+| Complete ELM-compatible bridge | PASS — portable core + USB target linked; hardware USB validation pending |
+| WS2812 exact data path | PASS — renderer + PWM + TIM1/DMA target linked; hardware signal validation pending |
+| USB CDC target | PASS — STM32CubeF0 linked; hardware enumeration validation pending |
+| ARM cross-build C1 | PASS — 52,628 B Flash / 12,400 B RAM |
+| ARM cross-build C2 | PASS — 39,036 B Flash / 12,400 B RAM |
+| ARM cross-build BH | PASS — 38,516 B Flash / 12,400 B RAM |
 | Bench test on existing hardware, no modification | PENDING |
 | Passive in-vehicle validation | PENDING |
 | Controlled active-feature validation | PENDING |
