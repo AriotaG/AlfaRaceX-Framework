@@ -76,5 +76,6 @@ jobs:
           git config user.name "AlfaRaceX Release Automation"
           git config user.email "58816127+AriotaG@users.noreply.github.com"
           git add PROJECT_MANIFEST.json "releases/$VERSION"
+          git add -f "releases/$VERSION/"*.hex "releases/$VERSION/"*.bin
           git commit -m "release: package AlfaRaceX $VERSION"
           git push origin HEAD:main
