@@ -39,6 +39,7 @@ MY20 IPC display-enabling condition is isolated and verified on the vehicle.
 
 ## Stable promotion gate
 
+The exact candidate HEAD must pass the complete CI matrix before merge and packaging.
 This remains a prerelease. It must not be promoted to 1.0.0 Stable until bench boot,
 passive in-vehicle CAN/telemetry checks, controlled feature-by-feature validation and
 soak testing pass on the existing BACCAble hardware.
