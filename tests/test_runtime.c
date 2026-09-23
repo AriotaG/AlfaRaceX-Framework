@@ -65,8 +65,6 @@ static ArxRuntimeOps ops(Sink *s){
 
 
 static void telemetry_runtime_unit(void){
-    telemetry_runtime_unit();
-
     Sink sink={0};
     ArxRuntimeOps o=ops(&sink);
     ArxRuntime rt;
@@ -117,6 +115,8 @@ static void telemetry_runtime_unit(void){
 }
 
 int main(void){
+    telemetry_runtime_unit();
+
     Sink sink={0};
     ArxRuntimeOps o=ops(&sink);
     ArxRuntime c1;
