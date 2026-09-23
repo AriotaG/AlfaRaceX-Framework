@@ -1,0 +1,87 @@
+name: Bootstrap source tree
+
+on:
+  push:
+    paths:
+      - '.github/workflows/bootstrap-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  expand:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rebuild source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          parts=(bootstrap-0.8.0-dev.xz.part*)
+          if [ "${#parts[@]}" -eq 0 ]; then
+            echo "No bootstrap parts found" >&2
+            exit 1
+          fi
+          printf '%s\n' "${parts[@]}" | sort -V > /tmp/arx_parts.txt
+          while IFS= read -r p; do cat "$p"; done < /tmp/arx_parts.txt > /tmp/arx_bootstrap.b64
+          base64 -d /tmp/arx_bootstrap.b64 > /tmp/arx_bootstrap.tar.xz
+          xz -t /tmp/arx_bootstrap.tar.xz
+          mkdir -p /tmp/arx_extract
+          tar -xJf /tmp/arx_bootstrap.tar.xz -C /tmp/arx_extract
+
+          src=/tmp/arx_extract
+          entries=(/tmp/arx_extract/*)
+          if [ "${#entries[@]}" -eq 1 ] && [ -d "${entries[0]}" ]; then
+            src="${entries[0]}"
+          fi
+
+          test -f "$src/CMakeLists.txt"
+          test -d "$src/src"
+          test -d "$src/include"
+          test -d "$src/tests"
+
+          rsync -a --delete-excluded \
+            --exclude '.git/' \
+            --exclude 'bootstrap-0.8.0-dev.*.part*' \
+            "$src/" ./
+
+          rm -f bootstrap-0.8.0-dev.xz.part* bootstrap-0.8.0-dev.b64.part*
+
+      - name: Configure Debug
+        run: cmake -S . -B build-debug -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build Debug
+        run: cmake --build build-debug --parallel 2
+
+      - name: Test Debug
+        run: ctest --test-dir build-debug --output-on-failure
+
+      - name: Configure Release
+        run: cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build Release
+        run: cmake --build build-release --parallel 2
+
+      - name: Test Release
+        run: ctest --test-dir build-release --output-on-failure
+
+      - name: Publish source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build-debug build-release
+          git config user.name "AlfaRaceX Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to publish"
+            exit 0
+          fi
+          git commit -m "chore: expand 0.8.0-dev source tree"
+          git push origin HEAD:main
