@@ -121,6 +121,16 @@ void arx_decode_frame(const ArxCanFrame *frame, ArxVehicleState *state) {
     }
 
     if (!frame->extended_id && frame->bus == ARX_BUS_C1 &&
+        frame->id == 0x41Au && frame->dlc >= 6u) {
+        const uint16_t current_raw=(uint16_t)(((uint16_t)frame->data[4] << 4u) |
+                                             ((uint16_t)frame->data[5] >> 4u));
+        state->battery_soc_percent=(float)(frame->data[1] & 0x7Fu);
+        state->battery_current_a=(float)current_raw * 0.1f - 250.0f;
+        state->valid_mask |= ARX_VS_BATTERY_SOC | ARX_VS_BATTERY_CURR;
+        return;
+    }
+
+    if (!frame->extended_id && frame->bus == ARX_BUS_C1 &&
         frame->id == 0x2EDu && frame->dlc >= 7u) {
         state->shift_urgency = (uint8_t)(frame->data[6] & 0x03u);
         state->valid_mask |= ARX_VS_SHIFT;
