@@ -35,7 +35,7 @@ drop-in flashable image.
 | Low-consume policy | `arx_power` | Core parity; STM32 reset/transceiver GPIO contract implemented, hardware validation pending |
 | CAN sniffer | `arx_sniffer` | Portable parity incl. binary buffering/streaming; USB FS target validation pending |
 | ELM-compatible diagnostics | `arx_elm327` | Portable parity incl. AT core, ISO-TP and multi-bus routing; USB FS target validation pending |
-| Dashboard/menu | `arx_dashboard` | Portable parity incl. wheel/menu runtime and BH telematic scheduling; replay/target validation pending |
+| Dashboard/menu | `arx_dashboard` | Diesel 55-page BACCAble order, 18-character value rendering, wheel/menu runtime and BH telematic scheduling implemented; vehicle replay/target validation pending |
 | Remote start | experimental | Excluded from stable profile |
 | Internal test-only functions | n/a | Excluded from stable profile |
 
@@ -47,6 +47,6 @@ Detailed parity tracking: [`FUNCTION_AUDIT.md`](FUNCTION_AUDIT.md).
 | Performance statistics | `arx_performance` | Core parity for 0-100 / 100-200 + best update |
 | Max Hold | `arx_max_hold` | Core parity |
 | Runtime configuration | `arx_config` | 32-slot migration + improved dual-slot CRC persistence model |
-| Diesel telemetry database | `arx_telemetry_db` | MY20 diesel parity set implemented; page scheduler replay validation pending |
+| Diesel telemetry database | `arx_telemetry_db` | Exact 55-page BACCAble 4.7 diesel contract implemented, including paired pages, 500 ms UDS polling, battery SoC (0x19BD) and native battery current (0x41A); physical vehicle validation pending |
 
 Hardware target contract: [`TARGET_STM32F072.md`](TARGET_STM32F072.md).

@@ -59,7 +59,10 @@ jobs:
           cp docs/FLASHING.md "$OUT/FLASHING.md"
           cp docs/HARDWARE_VALIDATION_CHECKLIST.md "$OUT/HARDWARE_VALIDATION_CHECKLIST.md"
 
-          NOTES="docs/RELEASE_1.0.0_RC1.md"
+          BASE_VERSION="${VERSION%-*}"
+          RELEASE_SUFFIX="${VERSION##*-}"
+          RELEASE_SUFFIX="$(printf '%s' "$RELEASE_SUFFIX" | tr '[:lower:]' '[:upper:]')"
+          NOTES="docs/RELEASE_${BASE_VERSION}_${RELEASE_SUFFIX}.md"
           if [ -f "$NOTES" ]; then
             cp "$NOTES" "$OUT/RELEASE_NOTES.md"
           else
