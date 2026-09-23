@@ -61,6 +61,8 @@ typedef struct {
     void *user;
 } ArxRuntimeOps;
 
+#define ARX_RUNTIME_TELEMETRY_CACHE_MAX 64u
+
 typedef struct {
     ArxRuntimeRole role;
     ArxRuntimeOps ops;
@@ -120,6 +122,11 @@ typedef struct {
     bool menu_was_visible_before_engine_off;
     uint32_t menu_shutdown_requested_ms;
     uint8_t visible_params[60];
+
+    float telemetry_values[ARX_RUNTIME_TELEMETRY_CACHE_MAX];
+    uint8_t telemetry_valid[ARX_RUNTIME_TELEMETRY_CACHE_MAX];
+    uint8_t telemetry_poll_slot;
+    uint32_t telemetry_last_poll_ms;
 
     uint32_t last_c2_status_request_ms;
     uint32_t last_bh_status_request_ms;
