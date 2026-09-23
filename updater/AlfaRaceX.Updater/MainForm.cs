@@ -29,23 +29,43 @@ internal sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
 
-        var logo = new Label
+        var alfa = new Label
         {
-            Text = "ALFARACEX",
-            ForeColor = Color.FromArgb(220, 35, 55),
+            Text = "Alfa",
+            ForeColor = Color.Gainsboro,
             Font = new Font("Segoe UI Semibold", 28f, FontStyle.Bold),
             AutoSize = true,
-            Location = new Point(28, 22)
+            Location = new Point(28, 20)
         };
-        Controls.Add(logo);
+        Controls.Add(alfa);
+
+        var race = new Label
+        {
+            Text = "Race",
+            ForeColor = Color.FromArgb(225, 20, 40),
+            Font = new Font("Bahnschrift SemiCondensed", 31f, FontStyle.Bold | FontStyle.Italic),
+            AutoSize = true,
+            Location = new Point(alfa.Right - 5, 17)
+        };
+        Controls.Add(race);
+
+        var xmark = new Label
+        {
+            Text = "X",
+            ForeColor = Color.Gainsboro,
+            Font = new Font("Segoe UI Semibold", 28f, FontStyle.Bold),
+            AutoSize = true,
+            Location = new Point(race.Right - 3, 20)
+        };
+        Controls.Add(xmark);
 
         var subtitle = new Label
         {
             Text = "FIRMWARE UPDATER",
-            ForeColor = Color.Gainsboro,
-            Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+            ForeColor = Color.FromArgb(180, 180, 185),
+            Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
             AutoSize = true,
-            Location = new Point(32, 72)
+            Location = new Point(32, 73)
         };
         Controls.Add(subtitle);
 
