@@ -92,6 +92,13 @@ target_compile_options(arx_${ARX_ROLE}.elf PRIVATE
   -Os -ffunction-sections -fdata-sections -Wall -Wextra -Wpedantic -Werror
 )
 
+# Vendor STM32CubeF0 sources are built as provided by ST. AlfaRaceX sources retain
+# -Werror; vendor warnings must not make an ARX release fail.
+set_source_files_properties(
+  ${SYSTEM_SRC} ${HAL_SRC} ${USB_DEVICE_SRC}
+  PROPERTIES COMPILE_OPTIONS "-Wno-error"
+)
+
 target_include_directories(arx_${ARX_ROLE}.elf PRIVATE
   ${ARX_ROOT}/include
   include
