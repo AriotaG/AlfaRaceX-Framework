@@ -1,0 +1,54 @@
+name: Build AlfaRaceX Updater
+
+on:
+  pull_request:
+    paths:
+      - "updater/**"
+      - "distribution/**"
+      - ".github/workflows/build-updater.yml"
+  push:
+    branches: [main]
+    paths:
+      - "updater/**"
+      - "distribution/**"
+      - ".github/workflows/build-updater.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish single-file Windows executable
+        shell: pwsh
+        run: dotnet publish updater/AlfaRaceX.Updater/AlfaRaceX.Updater.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o out
+
+      - name: Create SHA256
+        shell: pwsh
+        run: |
+          $hash=(Get-FileHash out/AlfaRaceX-Updater.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  AlfaRaceX-Updater.exe" | Out-File -Encoding ascii out/AlfaRaceX-Updater.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AlfaRaceX-Updater-win-x64
+          path: |
+            out/AlfaRaceX-Updater.exe
+            out/AlfaRaceX-Updater.sha256
+
+      - name: Attach updater to current firmware release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version=(Get-Content VERSION -Raw).Trim()
+          gh release upload $version out/AlfaRaceX-Updater.exe out/AlfaRaceX-Updater.sha256 --clobber
