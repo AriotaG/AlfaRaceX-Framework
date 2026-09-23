@@ -31,5 +31,7 @@ below is green.
 | Passive in-vehicle validation | PENDING |
 | Controlled active-feature validation | PENDING |
 
-Until the three cross-built images and target validation gates pass, the project must
-not be presented as a drop-in replacement.
+All software/build gates are complete. The project remains a prerelease until the
+three physical gates (bench, passive vehicle, controlled active validation) pass on
+the existing hardware. Only then may it be promoted to 1.0.0 Stable and described
+as a validated drop-in replacement.
