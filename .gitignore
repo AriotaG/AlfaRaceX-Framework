@@ -1,0 +1,32 @@
+# Build
+/build/
+/out/
+*.o
+*.obj
+*.elf
+*.hex
+*.bin
+*.map
+
+# IDE
+.vscode/
+.idea/
+.project
+.cproject
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs and captures
+*.log
+*.asc
+*.blf
+*.pcap
+*.pcapng
+
+# Python
+__pycache__/
+*.pyc
+.venv/
