@@ -28,7 +28,7 @@ jobs:
           tar -xJf /tmp/arx.tar.xz -C /tmp/arx
           test -f /tmp/arx/AlfaRaceX-Framework/VERSION
           test "$(cat /tmp/arx/AlfaRaceX-Framework/VERSION)" = "0.8.0-dev"
-          rsync -a --delete             --exclude='.git/'             --exclude='.github/workflows/bootstrap-sync.yml'             /tmp/arx/AlfaRaceX-Framework/ ./
+          rsync -a --delete             --exclude='.git/'             --exclude='.github/workflows/'             /tmp/arx/AlfaRaceX-Framework/ ./
       - name: Commit expanded tree
         shell: bash
         run: |
