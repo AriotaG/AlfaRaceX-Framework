@@ -6,6 +6,7 @@ static const ArxFeatureDescriptor catalog[] = {
     {"immobilizer","Diagnostic Intrusion Guard",ARX_FEATURE_NEEDS_VEHICLE_VALIDATION,true},
     {"led_strip","LED Strip Controller",ARX_FEATURE_NEEDS_VEHICLE_VALIDATION,true},
     {"shift","Shift Indicator",ARX_FEATURE_NEEDS_VEHICLE_VALIDATION,true},
+    {"dynamic_shift_display","Dynamic Shift Display",ARX_FEATURE_EXPERIMENTAL_DISABLED,true},
     {"ipc_profile","IPC Compatibility",ARX_FEATURE_NEEDS_VEHICLE_VALIDATION,false},
     {"dashboard_params","Dashboard Parameters",ARX_FEATURE_NEEDS_VEHICLE_VALIDATION,true},
     {"route","CAN Message Route Service",ARX_FEATURE_NEEDS_VEHICLE_VALIDATION,true},

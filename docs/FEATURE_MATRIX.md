@@ -1,16 +1,16 @@
 # AlfaRaceX feature matrix
 
-`Core parity` means the portable ARX logic now reproduces the validated reference
-behavior at protocol/state-machine level. `Target binding pending` means the same
-logic still needs the STM32 GPIO/CAN/UART/USB driver layer before the project is a
-drop-in flashable image.
+`Core parity` means the portable ARX logic reproduces the validated reference
+behavior at protocol/state-machine level. The STM32F072 C1/C2/BH target layer now
+builds and links; statuses that mention target validation refer to physical
+bench/vehicle validation, not missing target code.
 
 | Feature | Module | Status |
 |---|---|---|
 | Smart Start/Stop | `arx_start_stop` | Core parity |
 | Shift indicator | `arx_dynamic_shift` | Core parity |
 | MY23 shift hint | `arx_dynamic_shift` | Core parity |
-| Dynamic shift display experiment | `arx_drive_style` | Core primitives; IPC-only gate still to isolate |
+| Dynamic shift display experiment | `arx_drive_style` / `arx_dynamic_shift` | Experimental disabled; MY20 IPC-only display gate still to isolate and validate |
 | ESC/TC customizer | `arx_drive_style` | Core parity |
 | Race display mask | `arx_drive_style` | Core parity |
 | Dyno | `arx_dyno` | Core parity |
@@ -33,8 +33,8 @@ drop-in flashable image.
 | Exhaust flap | `arx_qv_exhaust` | Core parity |
 | LED strip meter | `arx_led_strip` | Core parity; WS2812 PWM encoding and STM32 TIM1/DMA target source implemented, hardware validation pending |
 | Low-consume policy | `arx_power` | Core parity; STM32 reset/transceiver GPIO contract implemented, hardware validation pending |
-| CAN sniffer | `arx_sniffer` | Portable parity incl. binary buffering/streaming; USB FS target validation pending |
-| ELM-compatible diagnostics | `arx_elm327` | Portable parity incl. AT core, ISO-TP and multi-bus routing; USB FS target validation pending |
+| CAN sniffer | `arx_sniffer` | Portable parity incl. binary buffering/streaming; USB FS target linked, physical validation pending |
+| ELM-compatible diagnostics | `arx_elm327` | Portable parity incl. AT core, ISO-TP and multi-bus routing; USB FS target linked, physical validation pending |
 | Dashboard/menu | `arx_dashboard` | Diesel 55-page BACCAble order, 18-character value rendering, wheel/menu runtime and BH telematic scheduling implemented; vehicle replay/target validation pending |
 | Remote start | experimental | Excluded from stable profile |
 | Internal test-only functions | n/a | Excluded from stable profile |
