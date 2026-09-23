@@ -14,6 +14,14 @@ It does not change the validated RC2 diesel telemetry runtime contract.
 - corrects stale audit wording that still described STM32F072 target bindings as missing
 - refreshes the release gate with the actual current ARM memory figures
 
+## ARM memory gate
+
+- C1: 62,280 B Flash / 12,736 B RAM
+- C2: 39,124 B Flash / 12,736 B RAM
+- BH: 38,600 B Flash / 12,736 B RAM
+
+All three remain within the existing-board limits.
+
 ## Validation scope
 
 The physical-validation target remains the existing three-controller STM32F072
