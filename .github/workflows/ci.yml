@@ -1,0 +1,64 @@
+name: AlfaRaceX CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build_type: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DARX_STRICT_WARNINGS=ON
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  cortex-m0-object-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ARM object compile gate
+        run: bash tools/arm_object_check/check_arm_objects.sh
+
+  stm32f072-images:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        role: [C1, C2, BH]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ARM GCC
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi
+      - name: Fetch STM32CubeF0
+        run: git clone --recursive --depth 1 https://github.com/STMicroelectronics/STM32CubeF0.git "$RUNNER_TEMP/STM32CubeF0"
+      - name: Configure firmware
+        run: >-
+          cmake -S targets/stm32f072_common -B build-target
+          -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/cmake/arm-none-eabi-toolchain.cmake"
+          -DSTM32CUBE_F0_ROOT="$RUNNER_TEMP/STM32CubeF0"
+          -DARX_ROLE=${{ matrix.role }}
+          -DCMAKE_BUILD_TYPE=Release
+      - name: Build and enforce memory budget
+        run: cmake --build build-target --parallel
+      - name: Upload image artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlfaRaceX-${{ matrix.role }}
+          path: |
+            build-target/arx_${{ matrix.role }}.elf
+            build-target/arx_${{ matrix.role }}.hex
+            build-target/arx_${{ matrix.role }}.bin
+            build-target/arx_${{ matrix.role }}.map
