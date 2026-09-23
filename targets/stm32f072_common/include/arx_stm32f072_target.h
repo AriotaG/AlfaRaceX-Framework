@@ -9,6 +9,7 @@
 #define ARX_STM32_SYSCLK_HZ              48000000u
 #define ARX_STM32_INTERCHIP_BAUD         38400u
 #define ARX_STM32_PEDAL_BAUD             9600u
+#define ARX_STM32_CONFIG_SYNC_DELAY_MS    3502u
 
 #define ARX_STM32_CAN_BS1_TQ             4u
 #define ARX_STM32_CAN_BS2_TQ             3u
