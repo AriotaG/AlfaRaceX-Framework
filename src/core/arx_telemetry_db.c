@@ -27,6 +27,14 @@ static const ArxTelemetryDefinition diesel[] = {
     NATIVE("gear",1.0f,0.0f,"",0),
     NATIVE("speed",1.0f,0.0f,"km/h",2),
     NATIVE("dpf_regen_mode",1.0f,0.0f,"",0),
+    NATIVE("battery_current",0.1f,-250.0f,"A",1),
+    NATIVE("seatbelt_alarm",1.0f,0.0f,"",0),
+    NATIVE("performance_0_100",1.0f,0.0f,"s",2),
+    NATIVE("performance_100_200",1.0f,0.0f,"s",2),
+    NATIVE("best_0_100",1.0f,0.0f,"s",2),
+    NATIVE("best_100_200",1.0f,0.0f,"s",2),
+    NATIVE("dna_mode",1.0f,0.0f,"",0),
+    NATIVE("pedal_map",1.0f,0.0f,"",0),
 
     UDS2("dpf_load",0x18DA10F1u,0x18DAF110u,0x18E4u,0.015259022f,0.0f,"%",1),
     UDS2("dpf_temperature",0x18DA10F1u,0x18DAF110u,0x18DEu,0.02f,-40.0f,"C",1),
@@ -36,6 +44,7 @@ static const ArxTelemetryDefinition diesel[] = {
     UDS2("mean_regen_distance",0x18DA10F1u,0x18DAF110u,0x3809u,1.0f,0.0f,"km",0),
     UDS2("mean_regen_duration",0x18DA10F1u,0x18DAF110u,0x380Au,0.01666666666f,0.0f,"min",0),
     UDS2("battery_voltage",0x18DA10F1u,0x18DAF110u,0x1955u,0.0005f,0.0f,"V",3),
+    UDS1("battery_soc",0x18DA10F1u,0x18DAF110u,0x19BDu,1.0f,0.0f,"%",1),
     UDS2("oil_quality",0x18DA10F1u,0x18DAF110u,0x3813u,0.0015259022f,0.0f,"%",1),
     UDS2("oil_level",0x18DA10F1u,0x18DAF110u,0x194Eu,0.1f,0.0f,"mm",1),
     UDS2("adblue_liters",0x18DA01F1u,0x18DAF101u,0xD930u,0.00097676774f,0.0f,"L",2),
@@ -67,9 +76,73 @@ static const ArxTelemetryDefinition diesel[] = {
     UDS2("maf_temperature",0x18DA10F1u,0x18DAF110u,0x193Fu,0.02f,-40.0f,"C",1)
 };
 
+
+static const ArxTelemetryPage diesel_pages[ARX_DIESEL_DASHBOARD_PAGE_COUNT] = {
+    {"PWR & TORQUE",       "engine_power",            "engine_torque"},
+    {"OIL BAR / WATER",    "oil_pressure",            "coolant_temperature"},
+    {"OIL BAR / OIL TEMP", "oil_pressure",            "oil_temperature"},
+    {"OIL / WATER TEMP",   "oil_temperature",         "coolant_temperature"},
+    {"OIL LEVEL / QUALITY","oil_level",               "oil_quality"},
+    {"BAT SOC / CURRENT",  "battery_soc",             "battery_current"},
+    {"BAT VOLT / CURRENT", "battery_voltage",         "battery_current"},
+    {"DPF LOAD / TEMP",    "dpf_load",                "dpf_temperature"},
+    {"REGEN / DPF TEMP",   "dpf_regen_progress",      "dpf_temperature"},
+    {"POWER",              "engine_power",            "engine_power"},
+    {"TORQUE",             "engine_torque",           "engine_torque"},
+    {"DPF LOAD",           "dpf_load",                "dpf_load"},
+    {"DPF TEMP",           "dpf_temperature",         "dpf_temperature"},
+    {"DPF REGEN",          "dpf_regen_progress",      "dpf_regen_progress"},
+    {"REGEN TYPE",         "dpf_regen_mode",          "dpf_regen_mode"},
+    {"LAST REGEN",         "distance_last_regen",     "distance_last_regen"},
+    {"TOTAL REGEN",        "regen_count",             "regen_count"},
+    {"MEAN REGEN KM",      "mean_regen_distance",     "mean_regen_distance"},
+    {"MEAN REGEN MIN",     "mean_regen_duration",     "mean_regen_duration"},
+    {"BATTERY V",          "battery_voltage",         "battery_voltage"},
+    {"BATTERY SOC",        "battery_soc",             "battery_soc"},
+    {"BATTERY A",          "battery_current",         "battery_current"},
+    {"OIL QUALITY",        "oil_quality",             "oil_quality"},
+    {"OIL TEMP",           "oil_temperature",         "oil_temperature"},
+    {"OIL PRESSURE",       "oil_pressure",            "oil_pressure"},
+    {"OIL LEVEL",          "oil_level",               "oil_level"},
+    {"ADBLUE L",           "adblue_liters",           "adblue_liters"},
+    {"ADBLUE %",           "adblue_percent",          "adblue_percent"},
+    {"GEARBOX TEMP",       "gearbox_temperature",     "gearbox_temperature"},
+    {"EXHAUST GAS",        "egt_turbo_in",            "egt_turbo_in"},
+    {"CURRENT GEAR",       "gear",                    "gear"},
+    {"WATER TEMP",         "coolant_temperature",     "coolant_temperature"},
+    {"EGR COMMAND",        "egr_command",             "egr_command"},
+    {"EGR STATUS",         "egr_status",              "egr_status"},
+    {"TURBO REQ BAR",      "turbo_request_pressure",  "turbo_request_pressure"},
+    {"TURBO REQ %",        "turbo_request_percent",   "turbo_request_percent"},
+    {"TURBO TEMP",         "turbo_temperature",       "turbo_temperature"},
+    {"TURBO BAR",          "turbo_pressure",          "turbo_pressure"},
+    {"TURBO %",            "turbo_percent",           "turbo_percent"},
+    {"BOOST REQUEST",      "boost_request",           "boost_request"},
+    {"BOOST SENSOR V",     "boost_sensor_voltage",    "boost_sensor_voltage"},
+    {"RAIL PRESSURE",      "rail_pressure",           "rail_pressure"},
+    {"DIESEL TEMP",        "diesel_temperature",      "diesel_temperature"},
+    {"ODOMETER LAST",      "odometer_last",           "odometer_last"},
+    {"AIR COND PRESS",     "ac_pressure",             "ac_pressure"},
+    {"FUEL CONS",          "fuel_consumption",        "fuel_consumption"},
+    {"DEBIMETER TEMP",     "maf_temperature",         "maf_temperature"},
+    {"SPEED",              "speed",                   "speed"},
+    {"SEATBELT ALARM",     "seatbelt_alarm",          "seatbelt_alarm"},
+    {"0-100 KM/H",         "performance_0_100",       "performance_0_100"},
+    {"100-200 KM/H",       "performance_100_200",     "performance_100_200"},
+    {"BEST 0-100",         "best_0_100",              "best_0_100"},
+    {"BEST 100-200",       "best_100_200",            "best_100_200"},
+    {"DRIVE STYLE",        "dna_mode",                "dna_mode"},
+    {"PEDAL MAP",          "pedal_map",               "pedal_map"}
+};
+
 const ArxTelemetryDefinition *arx_telemetry_diesel(size_t *count) {
     if (count) *count=sizeof(diesel)/sizeof(diesel[0]);
     return diesel;
+}
+
+const ArxTelemetryPage *arx_telemetry_diesel_pages(size_t *count) {
+    if (count) *count=sizeof(diesel_pages)/sizeof(diesel_pages[0]);
+    return diesel_pages;
 }
 
 const ArxTelemetryDefinition *arx_telemetry_find(
