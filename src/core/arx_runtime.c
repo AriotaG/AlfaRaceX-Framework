@@ -54,12 +54,14 @@ static bool enqueue_can(
     return true;
 }
 
+#if ARX_COMPILE_C1 || ARX_COMPILE_C2
 static bool ic_push(ArxRuntime *rt,const uint8_t *payload,size_t length) {
     if(!rt||!payload||length==0u)return false;
     ArxInterchipFrame f;
     arx_interchip_frame_build(&f,payload,length);
     return arx_interchip_queue_push(&rt->interchip.tx,&f);
 }
+#endif
 
 static bool dest_matches(ArxRuntimeRole role,uint8_t dest) {
     if(role==ARX_RUNTIME_C1)
@@ -76,6 +78,7 @@ static bool dest_matches(ArxRuntimeRole role,uint8_t dest) {
            dest==ARX_IC_ALL_SLEEP || dest==ARX_IC_ALL_CLEAR_DTC;
 }
 
+#if ARX_COMPILE_C1
 static uint8_t raw_acc_status(const ArxVehicleState *s) {
     switch(s->acc_state){
         case ARX_ACC_OFF:return 0u;
@@ -89,6 +92,7 @@ static uint8_t raw_acc_status(const ArxVehicleState *s) {
         default:return 0u;
     }
 }
+#endif
 
 static void update_engine_state(ArxRuntime *rt,uint32_t now_ms) {
     const bool running=(rt->vehicle.valid_mask&ARX_VS_ENGINE_RPM) &&
@@ -102,10 +106,12 @@ static void update_engine_state(ArxRuntime *rt,uint32_t now_ms) {
     }
 }
 
+#if ARX_COMPILE_C1
 static bool engine_running_long_enough(const ArxRuntime *rt,uint32_t now_ms) {
     return rt&&rt->engine_running&&rt->engine_running_since_ms &&
            now_ms-rt->engine_running_since_ms>=5000u;
 }
+#endif
 
 
 static void runtime_bind_preferences(ArxRuntime *rt,uint32_t now_ms,bool apply_usb) {
