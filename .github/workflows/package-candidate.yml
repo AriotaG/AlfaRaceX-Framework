@@ -1,0 +1,51 @@
+name: Package AlfaRaceX candidate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - VERSION
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install ARM GCC
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi
+      - name: Fetch STM32CubeF0
+        run: git clone --recursive --depth 1 https://github.com/STMicroelectronics/STM32CubeF0.git "$RUNNER_TEMP/STM32CubeF0"
+      - name: Build all existing-board images
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          rm -rf "releases/$VERSION"
+          mkdir -p "releases/$VERSION"
+          for ROLE in C1 C2 BH; do
+            BUILD="build-${ROLE}"
+            cmake -S targets/stm32f072_common -B "$BUILD"               -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/cmake/arm-none-eabi-toolchain.cmake"               -DSTM32CUBE_F0_ROOT="$RUNNER_TEMP/STM32CubeF0"               -DARX_ROLE="$ROLE"               -DCMAKE_BUILD_TYPE=Release
+            cmake --build "$BUILD" --parallel
+            cp "$BUILD/arx_${ROLE}.hex" "releases/$VERSION/AlfaRaceX-${ROLE}.hex"
+            cp "$BUILD/arx_${ROLE}.bin" "releases/$VERSION/AlfaRaceX-${ROLE}.bin"
+          done
+          sha256sum "releases/$VERSION/"*.hex "releases/$VERSION/"*.bin             | sed "s#  releases/$VERSION/#  #" > "releases/$VERSION/SHA256SUMS.txt"
+          cp docs/FLASHING.md "releases/$VERSION/FLASHING.md"
+          cp "docs/RELEASE_0.9.0_RC1.md" "releases/$VERSION/RELEASE_NOTES.md"
+      - name: Commit candidate binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          git config user.name "AlfaRaceX Release Automation"
+          git config user.email "58816127+AriotaG@users.noreply.github.com"
+          git add "releases/$VERSION"
+          git commit -m "release: package AlfaRaceX $VERSION"
+          git push origin HEAD:main
