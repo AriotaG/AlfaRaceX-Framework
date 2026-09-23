@@ -19,14 +19,14 @@ below is green.
 | Flash/settings compatibility layer | PASS (portable + HAL backend source) |
 | Boot-time persistent configuration load | PASS — compiled into target images |
 | Exact dashboard/menu behavior | PORTABLE PARITY; target build PASS; vehicle replay validation pending |
-| Full telemetry/UDS parameter set | DIESEL PARITY; target build PASS; page scheduler replay pending |
+| Full telemetry/UDS parameter set | DIESEL PARITY; exact 55-page scheduler implemented; physical CAN/IPC replay pending |
 | Sniffer binary data path | PASS — USB target compiles/links; hardware USB lifecycle validation pending |
 | Complete ELM-compatible bridge | PASS — portable core + USB target linked; hardware USB validation pending |
 | WS2812 exact data path | PASS — renderer + PWM + TIM1/DMA target linked; hardware signal validation pending |
 | USB CDC target | PASS — STM32CubeF0 linked; hardware enumeration validation pending |
-| ARM cross-build C1 | PASS — 52,628 B Flash / 12,400 B RAM |
-| ARM cross-build C2 | PASS — 39,036 B Flash / 12,400 B RAM |
-| ARM cross-build BH | PASS — 38,516 B Flash / 12,400 B RAM |
+| ARM cross-build C1 | PASS — RC2: 62,280 B Flash / 12,736 B RAM |
+| ARM cross-build C2 | PASS — RC2: 39,124 B Flash / 12,736 B RAM |
+| ARM cross-build BH | PASS — RC2: 38,600 B Flash / 12,736 B RAM |
 | Bench test on existing hardware, no modification | PENDING |
 | Passive in-vehicle validation | PENDING |
 | Controlled active-feature validation | PENDING |
