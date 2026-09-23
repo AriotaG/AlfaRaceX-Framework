@@ -16,6 +16,11 @@ int main(void){
     assert(!strcmp(pages[5].primary_key,"battery_soc"));
     assert(!strcmp(pages[5].secondary_key,"battery_current"));
     assert(!strcmp(pages[54].primary_key,"pedal_map"));
+    char rendered[19];
+    assert(arx_telemetry_format_page(&pages[5],75.0f,true,0.0f,true,rendered));
+    assert(!strncmp(rendered,"BAT",3u));
+    assert(strstr(rendered,"75")!=NULL);
+    assert(strstr(rendered,"0.0A")!=NULL);
     for(size_t i=0u;i<page_count;i++){
         assert(arx_telemetry_find(db,n,pages[i].primary_key));
         assert(arx_telemetry_find(db,n,pages[i].secondary_key));
