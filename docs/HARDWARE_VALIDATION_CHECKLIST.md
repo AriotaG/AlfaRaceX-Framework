@@ -1,4 +1,4 @@
-# Hardware validation checklist for 1.0 (RC2 gate)
+# Hardware validation checklist for 1.0 (RC3 gate)
 
 This checklist is the final gate between a software-complete release candidate and
 the first stable 1.0 release. It uses the existing board; no hardware replacement is
