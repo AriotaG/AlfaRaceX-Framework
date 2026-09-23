@@ -28,7 +28,7 @@ ZF 8-speed automatic transmission.
 
 ## Current baseline
 
-The current development baseline is **0.8.0-dev**. It is targeted at the existing
+The current release candidate is **0.9.0-rc1**. It is targeted at the existing
 three-controller STM32F072 hardware and currently includes:
 
 - C1 / C2 / BH runtime orchestration
@@ -46,8 +46,7 @@ three-controller STM32F072 hardware and currently includes:
 - Debug/Release host regression gates and Cortex-M0 object compilation
 - firmware size-gate tooling for the existing board memory map
 
-The project is **not yet promoted to 1.0.0**: final C1/C2/BH target linking and
-hardware-in-loop/on-vehicle validation are still release gates.
+The project is **software-complete for the 1.0 hardware target**, with C1/C2/BH ARM images linked and memory-gated. Promotion to **1.0.0 Stable** is held only by the physical validation checklist on the existing board and vehicle.
 
 ## Project principles
 
