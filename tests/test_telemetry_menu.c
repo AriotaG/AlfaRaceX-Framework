@@ -32,7 +32,7 @@ int main(void){
 
     ArxVehicleState vs;arx_vehicle_state_init(&vs);
     ArxCanFrame bat={.bus=ARX_BUS_C1,.id=0x41Au,.extended_id=false,.dlc=6,
-        .data={0,80,0,0,0x09,0xC4}};
+        .data={0,80,0,0,0x9C,0x40}};
     arx_decode_frame(&bat,&vs);
     assert(vs.valid_mask&ARX_VS_BATTERY_SOC);
     assert(vs.valid_mask&ARX_VS_BATTERY_CURR);
