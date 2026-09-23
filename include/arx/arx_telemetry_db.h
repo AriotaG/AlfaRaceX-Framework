@@ -35,12 +35,21 @@ typedef struct {
 
 typedef struct {
     const char *title;
+    const char *format;
     const char *primary_key;
     const char *secondary_key;
 } ArxTelemetryPage;
 
 const ArxTelemetryDefinition *arx_telemetry_diesel(size_t *count);
 const ArxTelemetryPage *arx_telemetry_diesel_pages(size_t *count);
+bool arx_telemetry_format_page(
+    const ArxTelemetryPage *page,
+    float primary,
+    bool primary_valid,
+    float secondary,
+    bool secondary_valid,
+    char out[19]
+);
 const ArxTelemetryDefinition *arx_telemetry_find(
     const ArxTelemetryDefinition *db,
     size_t count,
