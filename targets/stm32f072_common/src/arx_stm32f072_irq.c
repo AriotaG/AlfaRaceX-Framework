@@ -30,6 +30,10 @@ void USART2_IRQHandler(void) {
     HAL_UART_IRQHandler(arx_stm32_interchip_uart_handle());
 }
 
+void HAL_UARTEx_WakeupCallback(UART_HandleTypeDef *huart) {
+    (void)huart;
+}
+
 void DMA1_Channel4_5_6_7_IRQHandler(void) {
     arx_stm32f072_led_dma_irq();
 }
