@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+  <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f4f4"/><stop offset=".48" stop-color="#8e9196"/><stop offset="1" stop-color="#2b2d31"/></linearGradient>
+  <linearGradient id="dark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#292b2e"/><stop offset=".55" stop-color="#08090a"/><stop offset="1" stop-color="#1b1c1f"/></linearGradient>
+  <linearGradient id="red" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff1f32"/><stop offset=".55" stop-color="#c40018"/><stop offset="1" stop-color="#5c0010"/></linearGradient>
+  <filter id="shadow"><feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#000" flood-opacity=".8"/></filter>
+</defs>
+<g filter="url(#shadow)">
+  <!-- crown -->
+  <g fill="url(#metal)" stroke="#111" stroke-width="10">
+    <circle cx="437" cy="100" r="29"/><circle cx="500" cy="88" r="29"/><circle cx="563" cy="100" r="29"/><circle cx="626" cy="112" r="29"/>
+    <rect x="420" y="142" width="230" height="40" rx="9"/>
+  </g>
+  <!-- stylized biscione -->
+  <path d="M615 207 C735 208 793 270 789 344 C785 412 734 450 650 461
+           C739 485 779 535 766 598 C750 678 667 710 554 697
+           C482 689 425 713 420 760 C415 810 477 824 546 838
+           C611 851 640 887 619 931 C603 964 571 986 541 1002
+           C558 943 531 917 474 904 C364 879 302 829 309 752
+           C317 664 397 620 520 623
+           C610 625 657 607 661 570 C665 532 618 514 541 516
+           C429 519 362 474 361 393 C360 311 430 264 532 267
+           C567 268 590 250 615 207 Z"
+        fill="url(#dark)" stroke="#aeb0b4" stroke-width="12"/>
+  <path d="M604 222 C690 226 736 270 735 326 C734 378 700 405 626 420
+           M644 480 C720 512 722 570 681 603
+           M360 715 C387 662 447 648 532 654
+           M424 774 C446 817 522 812 581 853"
+        fill="none" stroke="#e00020" stroke-width="18" stroke-linecap="round" opacity=".95"/>
+  <!-- simplified mouth/person motif -->
+  <circle cx="330" cy="325" r="36" fill="url(#dark)" stroke="#aaa" stroke-width="10"/>
+  <path d="M367 298 l72 -74 l-25 89 l52 14 l-53 16 l20 87 l-67 -78" fill="url(#dark)" stroke="#aaa" stroke-width="10"/>
+  <!-- ARX -->
+  <g stroke="#111" stroke-width="10" paint-order="stroke">
+    <text x="115" y="720" font-family="Arial Black, Impact, sans-serif" font-size="300" font-style="italic" font-weight="900" fill="url(#metal)" letter-spacing="-28">AR</text>
+    <text x="662" y="720" font-family="Arial Black, Impact, sans-serif" font-size="300" font-style="italic" font-weight="900" fill="url(#red)">X</text>
+  </g>
+  <path d="M207 710 l58 -86 h55 l-67 86z" fill="url(#red)"/>
+</g>
+</svg>
