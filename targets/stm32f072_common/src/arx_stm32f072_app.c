@@ -54,7 +54,10 @@ static bool halfduplex_send(
      * switch direction explicitly, transmit, then return to RX.
      */
     (void)HAL_UART_AbortReceive(u);
-    if(HAL_HalfDuplex_EnableTransmitter(u)!=HAL_OK)return false;
+    if(HAL_HalfDuplex_EnableTransmitter(u)!=HAL_OK){
+        (void)HAL_HalfDuplex_EnableReceiver(u);
+        return false;
+    }
 
     const HAL_StatusTypeDef tx=HAL_UART_Transmit(
         u,(uint8_t*)data,length,timeout_ms
