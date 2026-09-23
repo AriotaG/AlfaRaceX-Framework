@@ -221,10 +221,12 @@ static bool menu_render(ArxRuntime *rt) {
     }
 
     if(rt->menu.main_page==1u){
-        size_t count=0u;const ArxTelemetryDefinition *db=arx_telemetry_diesel(&count);
+        size_t count=0u;const ArxTelemetryPage *pages=arx_telemetry_diesel_pages(&count);
         if(count){
             const size_t i=(size_t)rt->menu.param_page%count;
-            const char *key=db[i].key;size_t n=strlen(key);if(n>ARX_MENU_TEXT_LEN)n=ARX_MENU_TEXT_LEN;memcpy(text,key,n);
+            const char *title=pages[i].title;
+            size_t n=strlen(title);if(n>ARX_MENU_TEXT_LEN)n=ARX_MENU_TEXT_LEN;
+            memcpy(text,title,n);
         }
         return menu_send_text(rt,text);
     }
@@ -343,7 +345,7 @@ static void menu_on_2fa(ArxRuntime *rt,const ArxCanFrame *frame,uint32_t now_ms)
     if(!rt||!frame||frame->dlc<1u)return;
     if(!rt->cruise_control_disabled||raw_acc_status(&rt->vehicle)!=0u)return;
 
-    const uint8_t param_count=rt->config.diesel_profile?55u:46u;
+    const uint8_t param_count=rt->config.diesel_profile?ARX_DIESEL_DASHBOARD_PAGE_COUNT:46u;
     ArxMenuInputEvent e=arx_menu_input_on_button(
         &rt->menu_input,&rt->menu,&rt->menu_caps,frame->data[0],param_count,param_count
     );
