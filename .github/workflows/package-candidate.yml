@@ -29,16 +29,45 @@ jobs:
           VERSION="$(tr -d '\r\n' < VERSION)"
           rm -rf "releases/$VERSION"
           mkdir -p "releases/$VERSION"
+          printf '%s\n' "$GITHUB_SHA" > "releases/$VERSION/SOURCE_COMMIT.txt"
+          arm-none-eabi-gcc --version | head -1 > "releases/$VERSION/TOOLCHAIN.txt"
           for ROLE in C1 C2 BH; do
             BUILD="build-${ROLE}"
             cmake -S targets/stm32f072_common -B "$BUILD"               -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/cmake/arm-none-eabi-toolchain.cmake"               -DSTM32CUBE_F0_ROOT="$RUNNER_TEMP/STM32CubeF0"               -DARX_ROLE="$ROLE"               -DCMAKE_BUILD_TYPE=Release
             cmake --build "$BUILD" --parallel
             cp "$BUILD/arx_${ROLE}.hex" "releases/$VERSION/AlfaRaceX-${ROLE}.hex"
             cp "$BUILD/arx_${ROLE}.bin" "releases/$VERSION/AlfaRaceX-${ROLE}.bin"
+            arm-none-eabi-size "$BUILD/arx_${ROLE}.elf" > "releases/$VERSION/SIZE-${ROLE}.txt"
           done
           sha256sum "releases/$VERSION/"*.hex "releases/$VERSION/"*.bin             | sed "s#  releases/$VERSION/#  #" > "releases/$VERSION/SHA256SUMS.txt"
           cp docs/FLASHING.md "releases/$VERSION/FLASHING.md"
           cp "docs/RELEASE_0.9.0_RC1.md" "releases/$VERSION/RELEASE_NOTES.md"
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root=Path(".")
+          version=Path("VERSION").read_text().strip()
+          files=[]
+          for p in sorted(root.rglob("*")):
+              if not p.is_file():
+                  continue
+              rel=p.as_posix()
+              if rel.startswith(".git/") or rel.startswith("build-") or rel=="PROJECT_MANIFEST.json":
+                  continue
+              if rel.startswith(f"releases/{version}/"):
+                  continue
+              files.append({
+                  "path": rel,
+                  "bytes": p.stat().st_size,
+                  "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+              })
+          Path("PROJECT_MANIFEST.json").write_text(json.dumps({
+              "project":"AlfaRaceX-Framework",
+              "baseline":version,
+              "source_commit":os.environ.get("GITHUB_SHA",""),
+              "files":files,
+          },indent=2)+"\n")
+          PY
       - name: Commit candidate binaries
         shell: bash
         run: |
@@ -46,6 +75,6 @@ jobs:
           VERSION="$(tr -d '\r\n' < VERSION)"
           git config user.name "AlfaRaceX Release Automation"
           git config user.email "58816127+AriotaG@users.noreply.github.com"
-          git add "releases/$VERSION"
+          git add PROJECT_MANIFEST.json "releases/$VERSION"
           git commit -m "release: package AlfaRaceX $VERSION"
           git push origin HEAD:main
