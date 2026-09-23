@@ -17,6 +17,7 @@ internal static class WinUsbNative
     internal const uint FileShareWrite = 0x00000002;
     internal const uint OpenExisting = 3;
     internal const uint FileAttributeNormal = 0x00000080;
+    internal const uint FileFlagOverlapped = 0x40000000;
     internal static readonly IntPtr InvalidHandleValue = new(-1);
 
     [StructLayout(LayoutKind.Sequential)]
