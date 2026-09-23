@@ -168,3 +168,18 @@ The 0.8 line makes validation itself part of the product: assertions remain acti
 in both Debug and Release tests, warnings are fatal, Cortex-M0 compilation is a
 mandatory gate, and role-specific firmware-size checks enforce the existing-board
 Flash/RAM limits. See `docs/RELEASE_0.8.0_DEV.md`.
+
+
+## 0.9 release candidate
+
+The three STM32F072 role images now build and link with the real ARM GCC toolchain
+against STM32CubeF0 on GitHub Actions. All existing-board memory gates pass:
+
+- C1: 52,628 B Flash / 12,400 B RAM
+- C2: 39,036 B Flash / 12,400 B RAM
+- BH: 38,516 B Flash / 12,400 B RAM
+
+Debug, Release, AddressSanitizer/UndefinedBehaviorSanitizer and Cortex-M0 compilation
+gates are green. The next promotion is `0.9.0-rc1`; final `1.0.0` requires the
+physical existing-board validation checklist in
+[`docs/HARDWARE_VALIDATION_CHECKLIST.md`](docs/HARDWARE_VALIDATION_CHECKLIST.md).
