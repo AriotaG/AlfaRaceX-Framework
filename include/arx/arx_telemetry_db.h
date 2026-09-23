@@ -31,7 +31,16 @@ typedef struct {
     uint8_t decimal_digits;
 } ArxTelemetryDefinition;
 
+#define ARX_DIESEL_DASHBOARD_PAGE_COUNT 55u
+
+typedef struct {
+    const char *title;
+    const char *primary_key;
+    const char *secondary_key;
+} ArxTelemetryPage;
+
 const ArxTelemetryDefinition *arx_telemetry_diesel(size_t *count);
+const ArxTelemetryPage *arx_telemetry_diesel_pages(size_t *count);
 const ArxTelemetryDefinition *arx_telemetry_find(
     const ArxTelemetryDefinition *db,
     size_t count,
