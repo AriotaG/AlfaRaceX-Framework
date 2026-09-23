@@ -1,0 +1,41 @@
+name: Bootstrap AlfaRaceX source tree
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - bootstrap-0.8.0-dev.b64
+
+permissions:
+  contents: write
+
+jobs:
+  expand:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Expand source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f bootstrap-0.8.0-dev.b64 || exit 0
+          base64 -d bootstrap-0.8.0-dev.b64 > /tmp/arx.zip
+          rm -rf /tmp/arx
+          mkdir -p /tmp/arx
+          unzip -q /tmp/arx.zip -d /tmp/arx
+          rsync -a --delete --exclude='.git/' --exclude='.github/workflows/bootstrap-sync.yml' /tmp/arx/AlfaRaceX-Framework/ ./
+          rm -f bootstrap-0.8.0-dev.b64
+      - name: Commit expanded tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet && [ -z "$(git status --porcelain)" ]; then
+            exit 0
+          fi
+          git config user.name "AlfaRaceX Automation"
+          git config user.email "58816127+AriotaG@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: import AlfaRaceX 0.8.0-dev source tree"
+          git push origin HEAD:main
