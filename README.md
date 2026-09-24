@@ -43,6 +43,18 @@ and as the source of the proven DFU core; it is no longer the official distribut
 The visual reference remains presentation-only: firmware versions, checksums, module
 state, progress, backup history and logs are populated dynamically by the application.
 
+## AlfaRaceX Hardware
+
+![AlfaRaceX wireless OBD hardware](docs/images/alfaracex-hardware-wireless.jpg)
+
+AlfaRaceX can optionally be paired with a dedicated compact OBD-II hardware interface developed for the project.
+
+The hardware is **not included with the source code**, and its schematics, PCB layout, bill of materials and manufacturing/assembly files are not part of the public repository.
+
+The distinctive hardware extension is **integrated wireless connectivity**, intended to support cable-free communication and future AlfaRaceX wireless functions while keeping the internal hardware design private.
+
+For information about the AlfaRaceX hardware, contact privately on Telegram: **[@AlfaRaceX](https://t.me/AlfaRaceX)**.
+
 ## Current baseline
 
 The current release candidate is **1.0.0-rc5**. It is targeted at the existing
