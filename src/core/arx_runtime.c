@@ -54,12 +54,382 @@ static bool enqueue_can(
     return true;
 }
 
-#if ARX_COMPILE_C1 || ARX_COMPILE_C2
+#if ARX_COMPILE_C1 || ARX_COMPILE_C2 || ARX_COMPILE_BH
 static bool ic_push(ArxRuntime *rt,const uint8_t *payload,size_t length) {
     if(!rt||!payload||length==0u)return false;
     ArxInterchipFrame f;
     arx_interchip_frame_build(&f,payload,length);
     return arx_interchip_queue_push(&rt->interchip.tx,&f);
+}
+
+static bool ic_push_link(ArxRuntime *rt,const ArxLinkFrame *link) {
+    if(!rt||!link)return false;
+    ArxInterchipFrame f;
+    memcpy(f.bytes,link->raw,ARX_INTERCHIP_FRAME_SIZE);
+    return arx_interchip_queue_push(&rt->interchip.tx,&f);
+}
+#endif
+
+#if ARX_COMPILE_C1
+static ArxBus elm_bus(ArxElmBus bus) {
+    return bus==ARX_ELM_BUS_C2?ARX_BUS_C2:
+           bus==ARX_ELM_BUS_BH?ARX_BUS_BH:ARX_BUS_C1;
+}
+
+static uint8_t elm_link_destination(ArxElmBus bus) {
+    return bus==ARX_ELM_BUS_C2?ARX_LINK_TO_C2:ARX_LINK_TO_BH;
+}
+
+static void elm_usb_compact(ArxRuntime *rt) {
+    if(!rt||rt->elm_usb_tx_off==0u)return;
+    if(rt->elm_usb_tx_off>=rt->elm_usb_tx_len){
+        rt->elm_usb_tx_off=0u;
+        rt->elm_usb_tx_len=0u;
+        return;
+    }
+    const uint16_t remain=(uint16_t)(rt->elm_usb_tx_len-rt->elm_usb_tx_off);
+    memmove(rt->elm_usb_tx,&rt->elm_usb_tx[rt->elm_usb_tx_off],remain);
+    rt->elm_usb_tx_len=remain;
+    rt->elm_usb_tx_off=0u;
+}
+
+static bool elm_usb_queue(ArxRuntime *rt,const void *data,size_t length) {
+    if(!rt||(!data&&length))return false;
+    elm_usb_compact(rt);
+    if(length>sizeof(rt->elm_usb_tx)-rt->elm_usb_tx_len)return false;
+    if(length){
+        memcpy(&rt->elm_usb_tx[rt->elm_usb_tx_len],data,length);
+        rt->elm_usb_tx_len=(uint16_t)(rt->elm_usb_tx_len+length);
+    }
+    return true;
+}
+
+static bool elm_usb_text(ArxRuntime *rt,const char *text) {
+    return text?elm_usb_queue(rt,text,strlen(text)):false;
+}
+
+static void elm_usb_line_end(ArxRuntime *rt) {
+    if(rt&&rt->elm.linefeeds)(void)elm_usb_text(rt,"\r\n");
+    else if(rt)(void)elm_usb_text(rt,"\r");
+}
+
+static void elm_usb_prompt(ArxRuntime *rt) {
+    if(!rt)return;
+    elm_usb_line_end(rt);
+    (void)elm_usb_text(rt,">");
+}
+
+static char elm_hex(uint8_t n) {
+    return (char)(n<10u?('0'+n):('A'+n-10u));
+}
+
+static void elm_usb_hex_byte(ArxRuntime *rt,uint8_t value) {
+    char out[2]={elm_hex((uint8_t)(value>>4u)),elm_hex((uint8_t)(value&0x0Fu))};
+    (void)elm_usb_queue(rt,out,sizeof(out));
+}
+
+static void elm_usb_hex_id(ArxRuntime *rt,uint32_t id,bool extended) {
+    const uint8_t digits=extended?8u:3u;
+    char out[8];
+    for(uint8_t i=0u;i<digits;i++){
+        const uint8_t shift=(uint8_t)((digits-1u-i)*4u);
+        out[i]=elm_hex((uint8_t)((id>>shift)&0x0Fu));
+    }
+    (void)elm_usb_queue(rt,out,digits);
+}
+
+static void elm_usb_emit_event(ArxRuntime *rt,const ArxElmRxEvent *event) {
+    if(!rt||!event)return;
+    if(rt->elm.headers){
+        elm_usb_hex_id(rt,event->can_id,event->extended_id);
+        (void)elm_usb_text(rt," ");
+    }
+    for(uint16_t i=0u;i<event->length;i++){
+        elm_usb_hex_byte(rt,event->data[i]);
+        if(rt->elm.spaces&&i+1u<event->length)(void)elm_usb_text(rt," ");
+    }
+    elm_usb_line_end(rt);
+}
+
+static void elm_usb_no_data(ArxRuntime *rt) {
+    if(!rt)return;
+    (void)elm_usb_text(rt,"NO DATA");
+    elm_usb_prompt(rt);
+}
+
+static void elm_disarm_remote(ArxRuntime *rt) {
+    if(!rt||!rt->elm_request_active||
+       rt->elm_candidate_index>=rt->elm_candidate_count)return;
+    const ArxElmBus bus=rt->elm_candidates[rt->elm_candidate_index];
+    if(bus==ARX_ELM_BUS_C1)return;
+    ArxLinkFrame link;
+    arx_link_build_arm(
+        &link,elm_link_destination(bus),false,rt->elm_link_sequence++
+    );
+    (void)ic_push_link(rt,&link);
+}
+
+static bool elm_send_frame(
+    ArxRuntime *rt,const ArxCanFrame *frame,ArxElmBus target,uint32_t now_ms
+) {
+    if(!rt||!frame)return false;
+    if(target==ARX_ELM_BUS_C1)
+        return enqueue_can(rt,frame,ARX_PRIORITY_HIGH,now_ms);
+
+    ArxLinkFrame link;
+    arx_link_build_can(
+        &link,elm_link_destination(target),ARX_LINK_REQ,
+        frame->extended_id,frame->id,frame->data,frame->dlc,
+        rt->elm_link_sequence++
+    );
+    return ic_push_link(rt,&link);
+}
+
+static bool elm_arm_remote(
+    ArxRuntime *rt,ArxElmBus bus,uint32_t now_ms
+) {
+    if(!rt||bus==ARX_ELM_BUS_C1)return true;
+
+    uint32_t value=0u,mask=0u;
+    bool extended=rt->elm.tx_extended;
+    (void)arx_elm_response_filter(&rt->elm,&value,&mask,&extended);
+
+    ArxLinkFrame cfg;
+    arx_link_build_config(
+        &cfg,elm_link_destination(bus),value,mask,rt->elm.timeout_ms,
+        rt->elm.auto_flow_control,rt->elm_link_sequence++
+    );
+    if(extended)cfg.raw[2]|=ARX_LINK_FLAG_EXTID;
+    cfg.raw[17]=arx_link_checksum(cfg.raw);
+    if(!ic_push_link(rt,&cfg))return false;
+
+    ArxLinkFrame arm;
+    arx_link_build_arm(
+        &arm,elm_link_destination(bus),true,rt->elm_link_sequence++
+    );
+    if(!ic_push_link(rt,&arm))return false;
+
+    rt->elm_deadline_ms=now_ms+rt->elm.timeout_ms;
+    return true;
+}
+
+static bool elm_start_candidate(ArxRuntime *rt,uint32_t now_ms) {
+    if(!rt||rt->elm_candidate_index>=rt->elm_candidate_count)return false;
+    const ArxElmBus candidate=rt->elm_candidates[rt->elm_candidate_index];
+
+    if(!elm_arm_remote(rt,candidate,now_ms))return false;
+
+    ArxCanFrame first;
+    if(!arx_elm_transaction_start(
+        &rt->elm_transaction,&rt->elm,elm_bus(candidate),
+        rt->elm_request.data,rt->elm_request.length,1u,now_ms,&first
+    )){
+        elm_disarm_remote(rt);
+        return false;
+    }
+
+    rt->elm_saw_response=false;
+    rt->elm_deadline_ms=now_ms+rt->elm.timeout_ms;
+    return elm_send_frame(rt,&first,candidate,now_ms);
+}
+
+static void elm_finish_request(ArxRuntime *rt,bool success) {
+    if(!rt)return;
+    elm_disarm_remote(rt);
+    if(success&&rt->elm_candidate_index<rt->elm_candidate_count)
+        arx_elm_router_remember(
+            &rt->elm_router,&rt->elm,rt->elm_candidates[rt->elm_candidate_index]
+        );
+    rt->elm_request_active=false;
+    rt->elm_transaction.active=false;
+    if(success)elm_usb_prompt(rt);
+}
+
+static bool elm_try_next_candidate(ArxRuntime *rt,uint32_t now_ms) {
+    if(!rt)return false;
+    elm_disarm_remote(rt);
+    while(++rt->elm_candidate_index<rt->elm_candidate_count){
+        if(elm_start_candidate(rt,now_ms))return true;
+    }
+    rt->elm_request_active=false;
+    rt->elm_transaction.active=false;
+    elm_usb_no_data(rt);
+    return false;
+}
+
+static void elm_handle_response(
+    ArxRuntime *rt,const ArxCanFrame *frame,uint32_t now_ms
+) {
+    if(!rt||!frame||!rt->elm_request_active)return;
+
+    if(arx_elm_transaction_on_flow_control(
+        &rt->elm_transaction,frame,now_ms
+    )){
+        rt->elm_saw_response=true;
+        rt->elm_deadline_ms=now_ms+rt->elm.timeout_ms;
+        return;
+    }
+
+    ArxElmRxEvent event;
+    const ArxElmRxEventType kind=arx_elm_transaction_on_rx(
+        &rt->elm_transaction,&rt->elm,frame,&event
+    );
+    if(kind==ARX_ELM_RX_NONE)return;
+
+    rt->elm_saw_response=true;
+    rt->elm_deadline_ms=now_ms+rt->elm.timeout_ms;
+
+    if(kind==ARX_ELM_RX_NEED_FLOW_CONTROL){
+        ArxCanFrame fc;
+        if(arx_elm_transaction_build_flow_control(
+            &rt->elm_transaction,&rt->elm,now_ms,&fc
+        )){
+            const ArxElmBus target=rt->elm_candidates[rt->elm_candidate_index];
+            (void)elm_send_frame(rt,&fc,target,now_ms);
+        }
+        return;
+    }
+
+    if(kind==ARX_ELM_RX_PENDING)return;
+
+    if(kind==ARX_ELM_RX_RAW_FRAME||kind==ARX_ELM_RX_PAYLOAD){
+        elm_usb_emit_event(rt,&event);
+        elm_finish_request(rt,true);
+        return;
+    }
+
+    if(kind==ARX_ELM_RX_ERROR)(void)elm_try_next_candidate(rt,now_ms);
+}
+
+static void elm_tick(ArxRuntime *rt,uint32_t now_ms) {
+    if(!rt||!rt->elm_request_active)return;
+    if(rt->elm_candidate_index>=rt->elm_candidate_count){
+        rt->elm_request_active=false;
+        elm_usb_no_data(rt);
+        return;
+    }
+
+    ArxCanFrame next;
+    if(arx_elm_transaction_next_tx(&rt->elm_transaction,now_ms,&next)){
+        const ArxElmBus target=rt->elm_candidates[rt->elm_candidate_index];
+        (void)elm_send_frame(rt,&next,target,now_ms);
+    }
+
+    if((int32_t)(now_ms-rt->elm_deadline_ms)>=0)
+        (void)elm_try_next_candidate(rt,now_ms);
+}
+
+static void elm_process_line(ArxRuntime *rt,uint32_t now_ms) {
+    if(!rt||rt->elm_line_len==0u)return;
+    rt->elm_line[rt->elm_line_len]='\0';
+
+    if(rt->elm.echo){
+        (void)elm_usb_queue(rt,rt->elm_line,rt->elm_line_len);
+        elm_usb_line_end(rt);
+    }
+
+    const char *p=rt->elm_line;
+    while(*p==' '||*p=='\t')p++;
+    const bool at=(p[0]=='A'||p[0]=='a')&&(p[1]=='T'||p[1]=='t');
+
+    if(at){
+        char reply[192];
+        const size_t n=arx_elm327_command(&rt->elm,p,reply,sizeof(reply));
+        (void)elm_usb_queue(rt,reply,n);
+        rt->elm_line_len=0u;
+        return;
+    }
+
+    if(rt->elm_request_active){
+        (void)elm_usb_text(rt,"BUS BUSY");
+        elm_usb_prompt(rt);
+        rt->elm_line_len=0u;
+        return;
+    }
+
+    if(!arx_elm327_prepare_request(&rt->elm,p,&rt->elm_request)){
+        (void)elm_usb_text(rt,"?");
+        elm_usb_prompt(rt);
+        rt->elm_line_len=0u;
+        return;
+    }
+
+    rt->elm_candidate_count=arx_elm_router_candidates(
+        &rt->elm_router,&rt->elm,rt->elm_candidates
+    );
+    rt->elm_candidate_index=0u;
+    rt->elm_request_active=rt->elm_candidate_count>0u;
+    if(!rt->elm_request_active||!elm_start_candidate(rt,now_ms)){
+        rt->elm_request_active=false;
+        elm_usb_no_data(rt);
+    }
+
+    rt->elm_line_len=0u;
+}
+#endif
+
+#if ARX_COMPILE_C2 || ARX_COMPILE_BH
+static uint8_t diag_link_destination(ArxRuntimeRole role) {
+    return role==ARX_RUNTIME_C2?ARX_LINK_TO_C2:ARX_LINK_TO_BH;
+}
+
+static void diag_slave_handle_link(
+    ArxRuntime *rt,const ArxLinkFrame *link,uint32_t now_ms
+) {
+    if(!rt||!link)return;
+    const uint8_t type=link->raw[1];
+
+    if(type==ARX_LINK_CFG){
+        rt->diag_filter_value=arx_link_can_id(link);
+        rt->diag_filter_mask=
+            ((uint32_t)link->raw[8]<<24u)|((uint32_t)link->raw[9]<<16u)|
+            ((uint32_t)link->raw[10]<<8u)|(uint32_t)link->raw[11];
+        rt->diag_timeout_ms=(uint16_t)(((uint16_t)link->raw[12]<<8u)|link->raw[13]);
+        if(rt->diag_timeout_ms==0u)rt->diag_timeout_ms=ARX_ELM_DEFAULT_TIMEOUT;
+        rt->diag_link_extended=(link->raw[2]&ARX_LINK_FLAG_EXTID)!=0u;
+        return;
+    }
+
+    if(type==ARX_LINK_ARM){
+        rt->diag_link_armed=(link->raw[2]&ARX_LINK_FLAG_ARM_ON)!=0u;
+        rt->diag_deadline_ms=now_ms+rt->diag_timeout_ms;
+        return;
+    }
+
+    if(type==ARX_LINK_REQ&&rt->diag_link_armed){
+        ArxCanFrame frame={0};
+        frame.bus=role_bus(rt->role);
+        frame.id=arx_link_can_id(link);
+        frame.extended_id=(link->raw[2]&ARX_LINK_FLAG_EXTID)!=0u;
+        frame.dlc=arx_link_dlc(link);
+        frame.timestamp_ms=now_ms;
+        memcpy(frame.data,arx_link_data(link),frame.dlc);
+        (void)enqueue_can(rt,&frame,ARX_PRIORITY_HIGH,now_ms);
+        rt->diag_deadline_ms=now_ms+rt->diag_timeout_ms;
+    }
+}
+
+static void diag_slave_on_can(
+    ArxRuntime *rt,const ArxCanFrame *frame,uint32_t now_ms
+) {
+    if(!rt||!frame||!rt->diag_link_armed)return;
+    if((int32_t)(now_ms-rt->diag_deadline_ms)>=0){
+        rt->diag_link_armed=false;
+        return;
+    }
+    if(frame->extended_id!=rt->diag_link_extended)return;
+    if(rt->diag_filter_mask!=0u &&
+       (frame->id&rt->diag_filter_mask)!=(rt->diag_filter_value&rt->diag_filter_mask))
+        return;
+
+    ArxLinkFrame response;
+    arx_link_build_can(
+        &response,ARX_LINK_TO_MASTER,ARX_LINK_RSP,
+        frame->extended_id,frame->id,frame->data,frame->dlc,
+        rt->diag_link_sequence++
+    );
+    if(ic_push_link(rt,&response))
+        rt->diag_deadline_ms=now_ms+rt->diag_timeout_ms;
 }
 #endif
 
