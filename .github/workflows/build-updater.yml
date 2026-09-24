@@ -4,13 +4,11 @@ on:
   pull_request:
     paths:
       - "updater/**"
-      - "distribution/**"
       - ".github/workflows/build-updater.yml"
   push:
     branches: [main]
     paths:
       - "updater/**"
-      - "distribution/**"
       - ".github/workflows/build-updater.yml"
   workflow_dispatch:
 
@@ -51,11 +49,17 @@ jobs:
             out/AlfaRaceX-Updater.exe
             out/AlfaRaceX-Updater.sha256
 
-      - name: Attach updater to current firmware release
+      - name: Publish standalone updater release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $version=(Get-Content VERSION -Raw).Trim()
-          gh release upload $version out/AlfaRaceX-Updater.exe out/AlfaRaceX-Updater.sha256 --clobber
+          [xml]$project=Get-Content updater/AlfaRaceX.Updater/AlfaRaceX.Updater.csproj
+          $version=[string]$project.Project.PropertyGroup.Version
+          $tag="updater-v$version"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title "AlfaRaceX Updater $version" --notes "Updater Windows indipendente dalle release firmware AlfaRaceX."
+          }
+          gh release upload $tag out/AlfaRaceX-Updater.exe out/AlfaRaceX-Updater.sha256 --clobber
