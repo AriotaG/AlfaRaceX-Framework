@@ -12,6 +12,7 @@ namespace AlfaRaceX.Desktop;
 public partial class MainWindow : Window
 {
     private const string UiHost = "app.alfaracex.local";
+    private const string DisclaimerVersion = "2026-09-24-v1";
     private readonly HistoryRepository _history = new(DesktopPaths.Database);
     private readonly UpdateCoordinator _updates = new();
     private readonly BackupRestoreService _backups = new();
@@ -95,10 +96,20 @@ public partial class MainWindow : Window
 
     private async Task HandleActionAsync(string action, JsonElement payload)
     {
+        if (!IsDisclaimerAccepted() &&
+            action is not ("initialize" or "acceptDisclaimer" or "exitApplication" or "openExternal"))
+            throw new InvalidOperationException("Per utilizzare AlfaRaceX è necessario accettare il disclaimer di sicurezza.");
+
         switch (action)
         {
             case "initialize":
                 await SendInitialStateAsync();
+                break;
+            case "acceptDisclaimer":
+                AcceptDisclaimer();
+                break;
+            case "exitApplication":
+                Close();
                 break;
             case "refreshDashboard":
                 await SendDashboardAsync();
@@ -161,7 +172,10 @@ public partial class MainWindow : Window
             backupRoot = DesktopPaths.Backups,
             database = DesktopPaths.Database,
             product = "AlfaRaceX",
-            repository = "https://github.com/AriotaG/AlfaRaceX-Framework"
+            repository = "https://github.com/AriotaG/AlfaRaceX-Framework",
+            disclaimerVersion = DisclaimerVersion,
+            disclaimerAccepted = IsDisclaimerAccepted(),
+            disclaimerAcceptedUtc = _history.GetSetting("DisclaimerAcceptedUtc")
         });
         await SendDashboardAsync();
         await SendManifestAsync(force: false);
@@ -364,6 +378,21 @@ public partial class MainWindow : Window
             Post("busy", new { value = false, category });
             SendLogs();
         }
+    }
+
+    private bool IsDisclaimerAccepted() =>
+        string.Equals(
+            _history.GetSetting("DisclaimerVersion"),
+            DisclaimerVersion,
+            StringComparison.Ordinal);
+
+    private void AcceptDisclaimer()
+    {
+        string acceptedUtc = DateTime.UtcNow.ToString("O");
+        _history.SetSetting("DisclaimerVersion", DisclaimerVersion);
+        _history.SetSetting("DisclaimerAcceptedUtc", acceptedUtc);
+        _history.AddEvent("INFO", "LEGAL", $"Disclaimer {DisclaimerVersion} accettato dall'utente.");
+        Post("disclaimerAccepted", new { version = DisclaimerVersion, acceptedUtc });
     }
 
     private void SendBackups()
