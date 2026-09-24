@@ -25,7 +25,7 @@ All three remain within the existing-board limits.
 ## Validation scope
 
 The physical-validation target remains the existing three-controller STM32F072
-BACCAble hardware installed on the reference Alfa Romeo Stelvio MY20 2.2 JTDm
+reference hardware installed on the reference Alfa Romeo Stelvio MY20 2.2 JTDm
 210 HP Q4.
 
 Dynamic-mode shift display forcing remains outside the Stable gate until the MY20
