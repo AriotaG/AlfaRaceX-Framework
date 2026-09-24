@@ -28,7 +28,7 @@ ZF 8-speed automatic transmission.
 
 ## Current baseline
 
-The current release candidate is **1.0.0-rc4**. It is targeted at the existing
+The current release candidate is **1.0.0-rc5**. It is targeted at the existing
 three-controller STM32F072 hardware and currently includes:
 
 - C1 / C2 / BH runtime orchestration
@@ -40,13 +40,14 @@ three-controller STM32F072 hardware and currently includes:
 - pedal-controller UART protocol
 - persistent-settings compatibility
 - dashboard/menu, 500 ms telemetry scheduling and 18-character value rendering
-- CAN sniffer and ELM-compatible diagnostic core
+- CAN sniffer and target-wired ELM-compatible diagnostics across C1/C2/BH
+- role-specific USB: C1 CDC, BH/C2 read-only MSC with safe MSC/CDC switching
 - WS2812 rendering/encoding path
 - STM32F072 target HAL/glue sources
 - Debug/Release host regression gates and Cortex-M0 object compilation
 - firmware size-gate tooling for the existing board memory map
 
-The project is **software-complete for the reference MY20 diesel hardware target**, with C1/C2/BH ARM images linked and memory-gated. The 1.0.0-rc4 validation scope is the reference Stelvio MY20 diesel profile. Promotion to **1.0.0 Stable** still requires the physical validation checklist on the existing board and vehicle.
+The project is **software-complete for the reference MY20 diesel hardware target**, with C1/C2/BH ARM images linked and memory-gated. The 1.0.0-rc5 validation scope is the reference Stelvio MY20 diesel profile and incorporates the USB/flash findings from a physical BACCAble V3.2.4 backup. Promotion to **1.0.0 Stable** still requires the physical validation checklist on the existing board and vehicle.
 
 ## Project principles
 
