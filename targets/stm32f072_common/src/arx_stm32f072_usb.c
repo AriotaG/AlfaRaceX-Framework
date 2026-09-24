@@ -6,18 +6,36 @@
 #include "stm32f0xx_hal.h"
 #include "usbd_core.h"
 #include "usbd_cdc.h"
+#include "usbd_msc.h"
 #include <string.h>
+
+#ifndef ARX_FIRMWARE_VERSION
+#define ARX_FIRMWARE_VERSION "dev"
+#endif
 
 #ifndef ARX_USB_VID
 #define ARX_USB_VID 0x0483U
 #endif
-#ifndef ARX_USB_PID
-#define ARX_USB_PID 0x5740U
+#ifndef ARX_USB_CDC_PID
+#define ARX_USB_CDC_PID 0x5740U
+#endif
+#ifndef ARX_USB_MSC_PID
+#define ARX_USB_MSC_PID 0x572AU
 #endif
 
 #define ARX_USB_SERIAL_DESC_SIZE 26U
 #define ARX_USB_RX_SIZE          CDC_DATA_FS_OUT_PACKET_SIZE
 #define ARX_USB_TX_SIZE          CDC_DATA_FS_IN_PACKET_SIZE
+#define ARX_MSC_BLOCK_SIZE       512U
+#define ARX_MSC_BLOCK_COUNT      128U
+
+#if defined(ARX_BUILD_BH)
+#define ARX_MSC_VOLUME_LABEL "ALFARACEXBH"
+#elif defined(ARX_BUILD_C2)
+#define ARX_MSC_VOLUME_LABEL "ALFARACEXC2"
+#else
+#define ARX_MSC_VOLUME_LABEL "ALFARACEXC1"
+#endif
 
 static USBD_HandleTypeDef usb_device;
 static PCD_HandleTypeDef usb_pcd;
@@ -29,13 +47,25 @@ static bool usb_attached;
 static bool restore_led_after_detach;
 static ArxUsbMode active_mode=ARX_USB_MODE_NONE;
 
-static const uint8_t device_desc[USB_LEN_DEV_DESC]={
+static const uint8_t cdc_device_desc[USB_LEN_DEV_DESC]={
     USB_LEN_DEV_DESC,USB_DESC_TYPE_DEVICE,
     0x00U,0x02U,
     0x02U,0x02U,0x00U,
     USB_MAX_EP0_SIZE,
     LOBYTE(ARX_USB_VID),HIBYTE(ARX_USB_VID),
-    LOBYTE(ARX_USB_PID),HIBYTE(ARX_USB_PID),
+    LOBYTE(ARX_USB_CDC_PID),HIBYTE(ARX_USB_CDC_PID),
+    0x00U,0x01U,
+    USBD_IDX_MFC_STR,USBD_IDX_PRODUCT_STR,USBD_IDX_SERIAL_STR,
+    USBD_MAX_NUM_CONFIGURATION
+};
+
+static const uint8_t msc_device_desc[USB_LEN_DEV_DESC]={
+    USB_LEN_DEV_DESC,USB_DESC_TYPE_DEVICE,
+    0x00U,0x02U,
+    0x00U,0x00U,0x00U,
+    USB_MAX_EP0_SIZE,
+    LOBYTE(ARX_USB_VID),HIBYTE(ARX_USB_VID),
+    LOBYTE(ARX_USB_MSC_PID),HIBYTE(ARX_USB_MSC_PID),
     0x00U,0x01U,
     USBD_IDX_MFC_STR,USBD_IDX_PRODUCT_STR,USBD_IDX_SERIAL_STR,
     USBD_MAX_NUM_CONFIGURATION
@@ -43,6 +73,112 @@ static const uint8_t device_desc[USB_LEN_DEV_DESC]={
 
 static const uint8_t lang_desc[USB_LEN_LANGID_STR_DESC]={
     USB_LEN_LANGID_STR_DESC,USB_DESC_TYPE_STRING,0x09U,0x04U
+};
+
+static const char msc_version_text[]="ALFARACEX V." ARX_FIRMWARE_VERSION "\r\n";
+
+static int8_t msc_inquiry[36]={
+    0x00,(int8_t)0x80,0x02,0x02,31,0x00,0x00,0x00,
+    'A','R','X',' ',' ',' ',' ',' ',
+    'A','l','f','a','R','a','c','e','X',' ','M','S','C',' ',' ',' ',
+    'R','C','5',' '
+};
+
+static void put_le16(uint8_t *p,uint16_t v){
+    p[0]=(uint8_t)v;
+    p[1]=(uint8_t)(v>>8u);
+}
+
+static void put_le32(uint8_t *p,uint32_t v){
+    p[0]=(uint8_t)v;
+    p[1]=(uint8_t)(v>>8u);
+    p[2]=(uint8_t)(v>>16u);
+    p[3]=(uint8_t)(v>>24u);
+}
+
+static void msc_make_sector(uint32_t sector,uint8_t out[ARX_MSC_BLOCK_SIZE]){
+    memset(out,0,ARX_MSC_BLOCK_SIZE);
+
+    if(sector==0u){
+        out[0]=0xEBu;out[1]=0xFEu;out[2]=0x90u;
+        memcpy(&out[3],"MSDOS5.0",8u);
+        put_le16(&out[11],ARX_MSC_BLOCK_SIZE);
+        out[13]=1u;
+        put_le16(&out[14],1u);
+        out[16]=1u;
+        put_le16(&out[17],32u);
+        put_le16(&out[19],ARX_MSC_BLOCK_COUNT);
+        out[21]=0xF8u;
+        put_le16(&out[22],1u);
+        put_le16(&out[24],63u);
+        put_le16(&out[26],255u);
+        put_le32(&out[28],0u);
+        put_le32(&out[32],0u);
+        out[36]=0x80u;
+        out[37]=0u;
+        out[38]=0x29u;
+        put_le32(&out[39],0x5AD80080u);
+        memcpy(&out[43],ARX_MSC_VOLUME_LABEL,11u);
+        memcpy(&out[54],"FAT12   ",8u);
+        out[510]=0x55u;
+        out[511]=0xAAu;
+        return;
+    }
+
+    if(sector==1u){
+        out[0]=0xF8u;
+        out[1]=0xFFu;
+        out[2]=0xFFu;
+        out[3]=0xFFu;
+        out[4]=0x0Fu;
+        return;
+    }
+
+    if(sector==2u){
+        memcpy(&out[0],ARX_MSC_VOLUME_LABEL,11u);
+        out[11]=0x08u;
+
+        memcpy(&out[32],"VERSION TXT",11u);
+        out[43]=0x20u;
+        put_le16(&out[32+26],2u);
+        put_le32(&out[32+28],(uint32_t)(sizeof(msc_version_text)-1u));
+        return;
+    }
+
+    if(sector==4u){
+        const size_t n=(sizeof(msc_version_text)-1u)<ARX_MSC_BLOCK_SIZE
+            ?(sizeof(msc_version_text)-1u):ARX_MSC_BLOCK_SIZE;
+        memcpy(out,msc_version_text,n);
+    }
+}
+
+static int8_t msc_init(uint8_t lun){(void)lun;return 0;}
+static int8_t msc_capacity(uint8_t lun,uint32_t *blocks,uint16_t *size){
+    (void)lun;
+    if(!blocks||!size)return -1;
+    *blocks=ARX_MSC_BLOCK_COUNT;
+    *size=ARX_MSC_BLOCK_SIZE;
+    return 0;
+}
+static int8_t msc_ready(uint8_t lun){(void)lun;return 0;}
+static int8_t msc_write_protected(uint8_t lun){(void)lun;return 1;}
+static int8_t msc_read(uint8_t lun,uint8_t *buf,uint32_t block,uint16_t count){
+    (void)lun;
+    if(!buf||block>=ARX_MSC_BLOCK_COUNT||
+       (uint32_t)count>ARX_MSC_BLOCK_COUNT-block)return -1;
+    for(uint16_t i=0u;i<count;i++)
+        msc_make_sector(block+i,&buf[(size_t)i*ARX_MSC_BLOCK_SIZE]);
+    return 0;
+}
+static int8_t msc_write(uint8_t lun,uint8_t *buf,uint32_t block,uint16_t count){
+    (void)lun;(void)buf;(void)block;(void)count;
+    return -1;
+}
+static int8_t msc_max_lun(void){return 0;}
+
+static USBD_StorageTypeDef msc_ops={
+    msc_init,msc_capacity,msc_ready,msc_write_protected,
+    msc_read,msc_write,msc_max_lun,msc_inquiry
 };
 
 static void unicode_hex32(uint32_t value,uint8_t *dst,uint8_t nibbles){
@@ -63,7 +199,10 @@ static void build_serial(void){
 }
 
 static uint8_t *desc_device(USBD_SpeedTypeDef speed,uint16_t *length){
-    (void)speed;*length=(uint16_t)sizeof(device_desc);return (uint8_t*)device_desc;
+    (void)speed;
+    *length=USB_LEN_DEV_DESC;
+    return (uint8_t*)(active_mode==ARX_USB_MODE_LEGACY_MSC
+        ?msc_device_desc:cdc_device_desc);
 }
 static uint8_t *desc_lang(USBD_SpeedTypeDef speed,uint16_t *length){
     (void)speed;*length=(uint16_t)sizeof(lang_desc);return (uint8_t*)lang_desc;
@@ -75,16 +214,22 @@ static uint8_t *desc_manufacturer(USBD_SpeedTypeDef speed,uint16_t *length){
     (void)speed;return desc_text("AlfaRaceX",length);
 }
 static uint8_t *desc_product(USBD_SpeedTypeDef speed,uint16_t *length){
-    (void)speed;return desc_text(active_mode==ARX_USB_MODE_DIAGNOSTIC?"AlfaRaceX Diagnostics":"AlfaRaceX CAN Stream",length);
+    (void)speed;
+    if(active_mode==ARX_USB_MODE_LEGACY_MSC)return desc_text("AlfaRaceX MSC",length);
+    return desc_text(active_mode==ARX_USB_MODE_DIAGNOSTIC
+        ?"AlfaRaceX Diagnostics":"AlfaRaceX CAN Stream",length);
 }
 static uint8_t *desc_serial(USBD_SpeedTypeDef speed,uint16_t *length){
     (void)speed;build_serial();*length=ARX_USB_SERIAL_DESC_SIZE;return serial_desc;
 }
 static uint8_t *desc_config(USBD_SpeedTypeDef speed,uint16_t *length){
-    (void)speed;return desc_text("ARX CDC",length);
+    (void)speed;
+    return desc_text(active_mode==ARX_USB_MODE_LEGACY_MSC?"ARX MSC":"ARX CDC",length);
 }
 static uint8_t *desc_interface(USBD_SpeedTypeDef speed,uint16_t *length){
-    (void)speed;return desc_text("ARX Interface",length);
+    (void)speed;
+    return desc_text(active_mode==ARX_USB_MODE_LEGACY_MSC
+        ?"ARX Storage":"ARX Interface",length);
 }
 
 static USBD_DescriptorsTypeDef descriptors={
@@ -120,7 +265,11 @@ static USBD_CDC_ItfTypeDef cdc_ops={
 };
 
 void *arx_usbd_static_malloc(uint32_t size){
-    static uint32_t memory[(sizeof(USBD_CDC_HandleTypeDef)+3u)/4u];
+    enum {
+        words=((sizeof(USBD_MSC_BOT_HandleTypeDef)>sizeof(USBD_CDC_HandleTypeDef)
+            ?sizeof(USBD_MSC_BOT_HandleTypeDef):sizeof(USBD_CDC_HandleTypeDef))+3u)/4u
+    };
+    static uint32_t memory[words];
     if(size>sizeof(memory))return NULL;
     memset(memory,0,sizeof(memory));
     return memory;
@@ -193,6 +342,9 @@ void USBD_LL_Delay(uint32_t delay){HAL_Delay(delay);}
 
 bool arx_stm32f072_usb_attach(ArxUsbMode mode,bool shared_led_pin){
     if(mode==ARX_USB_MODE_NONE)return false;
+#if defined(ARX_BUILD_C1)
+    if(mode==ARX_USB_MODE_LEGACY_MSC)return false;
+#endif
     if(usb_attached&&active_mode==mode)return true;
     if(usb_attached&&!arx_stm32f072_usb_detach())return false;
 
@@ -207,8 +359,15 @@ bool arx_stm32f072_usb_attach(ArxUsbMode mode,bool shared_led_pin){
 
     memset(&usb_device,0,sizeof(usb_device));
     if(USBD_Init(&usb_device,&descriptors,0u)!=USBD_OK)goto fail;
-    if(USBD_RegisterClass(&usb_device,&USBD_CDC)!=USBD_OK)goto fail_deinit;
-    if(USBD_CDC_RegisterInterface(&usb_device,&cdc_ops)!=USBD_OK)goto fail_deinit;
+
+    if(mode==ARX_USB_MODE_LEGACY_MSC){
+        if(USBD_RegisterClass(&usb_device,&USBD_MSC)!=USBD_OK)goto fail_deinit;
+        if(USBD_MSC_RegisterStorage(&usb_device,&msc_ops)!=USBD_OK)goto fail_deinit;
+    }else{
+        if(USBD_RegisterClass(&usb_device,&USBD_CDC)!=USBD_OK)goto fail_deinit;
+        if(USBD_CDC_RegisterInterface(&usb_device,&cdc_ops)!=USBD_OK)goto fail_deinit;
+    }
+
     if(USBD_Start(&usb_device)!=USBD_OK)goto fail_deinit;
     usb_attached=true;
     return true;
@@ -238,6 +397,7 @@ bool arx_stm32f072_usb_detach(void){
 }
 
 bool arx_stm32f072_usb_send(const uint8_t *data,size_t length){
+    if(active_mode==ARX_USB_MODE_LEGACY_MSC)return false;
     if(!usb_attached||!data||length==0u||length>sizeof(usb_tx))return false;
     if(usb_device.dev_state!=USBD_STATE_CONFIGURED||!usb_device.pClassData)return false;
     USBD_CDC_HandleTypeDef *cdc=(USBD_CDC_HandleTypeDef*)usb_device.pClassData;

@@ -12,6 +12,8 @@ typedef struct {
     uint8_t pedal[ARX_PEDAL_PACKET_SIZE];
     size_t pedal_count;
     size_t usb_bytes;
+    uint8_t usb_data[4096];
+    size_t usb_data_len;
     size_t usb_attach_count;
     size_t usb_detach_count;
     ArxUsbMode last_usb_mode;
@@ -43,7 +45,13 @@ static bool usb_detach(void *u){
     ((Sink*)u)->usb_detach_count++;return true;
 }
 static bool usb_send(const uint8_t *d,size_t n,void *u){
-    (void)d;((Sink*)u)->usb_bytes+=n;return true;
+    Sink *s=(Sink*)u;
+    s->usb_bytes+=n;
+    if(d&&n&&s->usb_data_len+n<=sizeof(s->usb_data)){
+        memcpy(&s->usb_data[s->usb_data_len],d,n);
+        s->usb_data_len+=n;
+    }
+    return true;
 }
 static bool led_submit(const ArxRgb rgb[ARX_LED_COUNT],void *u){
     (void)rgb;((Sink*)u)->led_submits++;return true;
@@ -63,6 +71,105 @@ static ArxRuntimeOps ops(Sink *s){
     return o;
 }
 
+
+static void elm_runtime_unit(void){
+    Sink sink={0};
+    ArxRuntimeOps o=ops(&sink);
+    ArxRuntime c1;
+    arx_runtime_init(&c1,ARX_RUNTIME_C1,&o);
+
+    ArxRuntimeConfig cfg;
+    arx_config_defaults(&cfg);
+    cfg.elm327_enabled=true;
+    cfg.sniffer_enabled=false;
+    arx_runtime_apply_config(&c1,&cfg,10u);
+    arx_runtime_tick(&c1,10u);
+    assert(sink.usb_attach_count==1u);
+    assert(sink.last_usb_mode==ARX_USB_MODE_DIAGNOSTIC);
+    arx_runtime_usb_configured(&c1,11u);
+
+    const uint8_t ati[]={'A','T','I','\r'};
+    arx_runtime_usb_rx(&c1,ati,sizeof(ati),12u);
+    for(uint32_t t=12u;t<40u;t++)arx_runtime_tick(&c1,t);
+    assert(sink.usb_data_len<sizeof(sink.usb_data));
+    sink.usb_data[sink.usb_data_len]='\0';
+    assert(strstr((const char*)sink.usb_data,"ELM327 v1.4")!=NULL);
+
+    sink.usb_data_len=0u;
+    const uint8_t obd[]={'0','1','0','C','\r'};
+    arx_runtime_usb_rx(&c1,obd,sizeof(obd),100u);
+    assert(c1.elm_request_active);
+    assert(arx_runtime_drain_can(&c1,100u,8u)>=1u);
+    bool found_request=false;
+    for(size_t i=0u;i<sink.can_count;i++){
+        if(sink.can[i].id==0x7DFu&&sink.can[i].dlc==8u&&
+           sink.can[i].data[0]==0x02u&&sink.can[i].data[1]==0x01u&&
+           sink.can[i].data[2]==0x0Cu)
+            found_request=true;
+    }
+    assert(found_request);
+
+    ArxCanFrame rsp={.bus=ARX_BUS_C1,.id=0x7E8u,.dlc=8u,
+        .data={0x04u,0x41u,0x0Cu,0x1Au,0xF8u,0u,0u,0u}};
+    arx_runtime_on_can(&c1,&rsp,101u);
+    for(uint32_t t=101u;t<130u;t++)arx_runtime_tick(&c1,t);
+    assert(!c1.elm_request_active);
+    assert(sink.usb_data_len<sizeof(sink.usb_data));
+    sink.usb_data[sink.usb_data_len]='\0';
+    assert(strstr((const char*)sink.usb_data,"41 0C 1A F8")!=NULL);
+
+    /* Force the same default functional request through C2 to prove that the
+       target diagnostic link is wired, not merely the portable router. */
+    Sink master_sink={0},c2_sink={0};
+    ArxRuntimeOps master_ops=ops(&master_sink);
+    ArxRuntimeOps slave_ops=ops(&c2_sink);
+    ArxRuntime master,c2;
+    arx_runtime_init(&master,ARX_RUNTIME_C1,&master_ops);
+    arx_runtime_init(&c2,ARX_RUNTIME_C2,&slave_ops);
+    arx_runtime_apply_config(&master,&cfg,3000u);
+    arx_runtime_tick(&master,3000u);
+    arx_runtime_usb_configured(&master,3001u);
+    arx_elm_router_remember(&master.elm_router,&master.elm,ARX_ELM_BUS_C2);
+
+    arx_runtime_usb_rx(&master,obd,sizeof(obd),3002u);
+    assert(master.elm_request_active);
+    assert(arx_runtime_drain_interchip(&master,3002u,8u)==3u);
+    assert(master_sink.ic_count==3u);
+
+    for(size_t i=0u;i<master_sink.ic_count;i++)
+        arx_runtime_on_interchip(&c2,master_sink.ic[i],3003u+(uint32_t)i);
+
+    assert(arx_runtime_drain_can(&c2,3006u,8u)>=1u);
+    bool c2_request=false;
+    for(size_t i=0u;i<c2_sink.can_count;i++){
+        if(c2_sink.can[i].id==0x7DFu&&c2_sink.can[i].data[1]==0x01u&&
+           c2_sink.can[i].data[2]==0x0Cu)c2_request=true;
+    }
+    assert(c2_request);
+
+    ArxCanFrame c2rsp={.bus=ARX_BUS_C2,.id=0x7E8u,.dlc=8u,
+        .data={0x04u,0x41u,0x0Cu,0x1Au,0xF8u,0u,0u,0u}};
+    arx_runtime_on_can(&c2,&c2rsp,3007u);
+    assert(arx_runtime_drain_interchip(&c2,3007u,8u)>=1u);
+    assert(c2_sink.ic_count>=1u);
+    arx_runtime_on_interchip(
+        &master,c2_sink.ic[c2_sink.ic_count-1u],3008u
+    );
+    assert(!master.elm_request_active);
+    for(uint32_t t=3008u;t<3040u;t++)arx_runtime_tick(&master,t);
+    assert(master_sink.usb_data_len<sizeof(master_sink.usb_data));
+    master_sink.usb_data[master_sink.usb_data_len]='\0';
+    assert(strstr((const char*)master_sink.usb_data,"41 0C 1A F8")!=NULL);
+
+    /* Slave roles default to the MSC compatibility class when sniffer is off. */
+    Sink msc_sink={0};
+    ArxRuntimeOps msc_ops=ops(&msc_sink);
+    ArxRuntime bh;
+    arx_runtime_init(&bh,ARX_RUNTIME_BH,&msc_ops);
+    arx_runtime_tick(&bh,0u);
+    assert(msc_sink.usb_attach_count==1u);
+    assert(msc_sink.last_usb_mode==ARX_USB_MODE_LEGACY_MSC);
+}
 
 static void telemetry_runtime_unit(void){
     Sink sink={0};
@@ -115,6 +222,7 @@ static void telemetry_runtime_unit(void){
 }
 
 int main(void){
+    elm_runtime_unit();
     telemetry_runtime_unit();
 
     Sink sink={0};

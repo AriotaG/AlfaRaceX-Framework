@@ -374,7 +374,7 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
 
 void arx_stm32f072_usb_rx(const uint8_t *data,size_t length) {
     if(!data||length==0u)return;
-    arx_runtime_usb_command(&runtime_ctx,HAL_GetTick());
+    arx_runtime_usb_rx(&runtime_ctx,data,length,HAL_GetTick());
 }
 
 void arx_stm32f072_app_loop(void) {

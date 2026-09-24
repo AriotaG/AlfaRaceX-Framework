@@ -12,16 +12,27 @@ bool arx_usb_mode_request(ArxUsbModeManager *m,ArxUsbMode mode,uint32_t now_ms) 
     if(!m)return false;
 
     if(mode==ARX_USB_MODE_NONE){
-        if(m->state==ARX_USB_DETACHED)return true;
+        m->queued_mode=ARX_USB_MODE_NONE;
+        if(m->state==ARX_USB_DETACHED){
+            m->mode=ARX_USB_MODE_NONE;
+            return true;
+        }
         m->state=ARX_USB_DETACH_REQUESTED;
         return true;
     }
 
-    if(m->mode!=ARX_USB_MODE_NONE && m->mode!=mode &&
-       m->state!=ARX_USB_DETACHED){
-        return false; /* modes are mutually exclusive */
+    if(m->state!=ARX_USB_DETACHED &&
+       m->mode!=ARX_USB_MODE_NONE &&
+       m->mode!=mode){
+        /* USB classes are mutually exclusive on this endpoint set. Detach the
+           current class first, then attach the requested class on the next
+           process cycle. */
+        m->queued_mode=mode;
+        m->state=ARX_USB_DETACH_REQUESTED;
+        return true;
     }
 
+    m->queued_mode=ARX_USB_MODE_NONE;
     m->mode=mode;
     m->activation_ms=now_ms;
     m->last_host_seen_ms=now_ms;
@@ -64,8 +75,18 @@ bool arx_usb_mode_process(ArxUsbModeManager *m,uint32_t now_ms,const ArxUsbOps *
 
     if(m->state==ARX_USB_DETACH_REQUESTED){
         if(ops&&ops->detach&&!ops->detach(ops->user))return false;
+        const ArxUsbMode next=m->queued_mode;
+        m->queued_mode=ARX_USB_MODE_NONE;
         m->state=ARX_USB_DETACHED;
         m->mode=ARX_USB_MODE_NONE;
+
+        if(next!=ARX_USB_MODE_NONE){
+            m->mode=next;
+            m->activation_ms=now_ms;
+            m->last_host_seen_ms=now_ms;
+            m->last_command_ms=now_ms;
+            m->state=ARX_USB_ATTACH_REQUESTED;
+        }
         return true;
     }
 
