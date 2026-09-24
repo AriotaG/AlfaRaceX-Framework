@@ -11,9 +11,9 @@ Alfa Romeo Stelvio MY20 2.2 JTDm diesel Q4 target.
 - adds battery current decoding from native C1 frame `0x41A`
 - keeps native `0x41A` SoC as a startup fallback until the first UDS SoC reply
 - adds a bounded telemetry cache
-- polls the active UDS dashboard page at the BACCAble-compatible 500 ms cadence
+- polls the active UDS dashboard page at the reference-compatible 500 ms cadence
 - decodes the reply and pushes the formatted 18-character value string to BH
-- restores BACCAble-style formatting for numeric and enum dashboard values
+- restores reference-style formatting for numeric and enum dashboard values
 - adds regression tests for the 55-page contract, battery decode, formatter and
   end-to-end UDS request/decode/dashboard path
 
@@ -42,4 +42,4 @@ MY20 IPC display-enabling condition is isolated and verified on the vehicle.
 The exact candidate HEAD must pass the complete CI matrix before merge and packaging.
 This remains a prerelease. It must not be promoted to 1.0.0 Stable until bench boot,
 passive in-vehicle CAN/telemetry checks, controlled feature-by-feature validation and
-soak testing pass on the existing BACCAble hardware.
+soak testing pass on the existing reference hardware.
