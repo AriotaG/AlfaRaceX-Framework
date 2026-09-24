@@ -1,5 +1,6 @@
 #include "arx/arx_telemetry_db.h"
 #include "arx/features/arx_menu.h"
+#include "arx/arx_decoder.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -7,6 +8,41 @@
 int main(void){
     size_t n=0;const ArxTelemetryDefinition *db=arx_telemetry_diesel(&n);
     assert(n>=40u);
+
+    size_t page_count=0u;
+    const ArxTelemetryPage *pages=arx_telemetry_diesel_pages(&page_count);
+    assert(pages&&page_count==ARX_DIESEL_DASHBOARD_PAGE_COUNT);
+    assert(!strcmp(pages[0].primary_key,"engine_power"));
+    assert(!strcmp(pages[5].primary_key,"battery_soc"));
+    assert(!strcmp(pages[5].secondary_key,"battery_current"));
+    assert(!strcmp(pages[54].primary_key,"pedal_map"));
+    char rendered[19];
+    assert(arx_telemetry_format_page(&pages[5],75.0f,true,0.0f,true,rendered));
+    assert(!strncmp(rendered,"BAT",3u));
+    assert(strstr(rendered,"75")!=NULL);
+    assert(strstr(rendered,"0.0A")!=NULL);
+    for(size_t i=0u;i<page_count;i++){
+        assert(arx_telemetry_find(db,n,pages[i].primary_key));
+        assert(arx_telemetry_find(db,n,pages[i].secondary_key));
+    }
+
+    const ArxTelemetryDefinition *soc=arx_telemetry_find(db,n,"battery_soc");
+    assert(soc&&soc->source==ARX_SIGNAL_UDS&&soc->request[2]==0x19u&&soc->request[3]==0xBDu);
+    ArxCanFrame soc_req;
+    assert(arx_telemetry_build_request(soc,ARX_BUS_C1,10u,&soc_req));
+    assert(soc_req.id==0x18DA10F1u);
+
+    const ArxTelemetryDefinition *current=arx_telemetry_find(db,n,"battery_current");
+    assert(current&&current->source==ARX_SIGNAL_NATIVE);
+
+    ArxVehicleState vs;arx_vehicle_state_init(&vs);
+    ArxCanFrame bat={.bus=ARX_BUS_C1,.id=0x41Au,.extended_id=false,.dlc=6,
+        .data={0,80,0,0,0x9C,0x40}};
+    arx_decode_frame(&bat,&vs);
+    assert(vs.valid_mask&ARX_VS_BATTERY_SOC);
+    assert(vs.valid_mask&ARX_VS_BATTERY_CURR);
+    assert(vs.battery_soc_percent>79.9f&&vs.battery_soc_percent<80.1f);
+    assert(vs.battery_current_a>-0.1f&&vs.battery_current_a<0.1f);
 
     const ArxTelemetryDefinition *d=arx_telemetry_find(db,n,"rail_pressure");
     assert(d&&d->request_id==0x18DA10F1u&&d->request[2]==0x19u&&d->request[3]==0x47u);

@@ -28,25 +28,25 @@ ZF 8-speed automatic transmission.
 
 ## Current baseline
 
-The current release candidate is **1.0.0-rc1**. It is targeted at the existing
+The current release candidate is **1.0.0-rc2**. It is targeted at the existing
 three-controller STM32F072 hardware and currently includes:
 
 - C1 / C2 / BH runtime orchestration
 - prioritized CAN transport with retry/deadline handling
 - UDS and ISO-TP transport
-- structured vehicle state and diesel telemetry database
+- structured vehicle state and BACCAble-compatible 55-page diesel telemetry database
 - function-specific state machines and restoration logic
 - 19-byte inter-controller protocol
 - pedal-controller UART protocol
 - persistent-settings compatibility
-- dashboard/menu and telemetry scheduling
+- dashboard/menu, 500 ms telemetry scheduling and 18-character value rendering
 - CAN sniffer and ELM-compatible diagnostic core
 - WS2812 rendering/encoding path
 - STM32F072 target HAL/glue sources
 - Debug/Release host regression gates and Cortex-M0 object compilation
 - firmware size-gate tooling for the existing board memory map
 
-The project is **software-complete for the 1.0 hardware target**, with C1/C2/BH ARM images linked and memory-gated. Promotion to **1.0.0 Stable** is held only by the physical validation checklist on the existing board and vehicle.
+The project is **software-complete for the reference MY20 diesel hardware target**, with C1/C2/BH ARM images linked and memory-gated. The 1.0.0-rc2 validation scope is the reference Stelvio MY20 diesel profile. Promotion to **1.0.0 Stable** still requires the physical validation checklist on the existing board and vehicle.
 
 ## Project principles
 
@@ -62,16 +62,14 @@ The project is **software-complete for the 1.0 hardware target**, with C1/C2/BH 
 The initial feature watches engine speed and drive mode, then generates the three
 shift urgency levels used by the instrument cluster message family.
 
-Default behavior:
+Current release behavior:
 
 - disabled in Natural
-- enabled in Dynamic
-- enabled in Race
+- BACCAble-parity shift behavior retained for Race
 - configurable RPM thresholds
 - no forced change of the vehicle's real DNA state
-
-A separate IPC-gating strategy can be added after a MY20 CAN capture identifies the
-minimum display-enabling condition required by the cluster.
+- Dynamic-mode shift is an AlfaRaceX extension and remains experimental until the
+  MY20 IPC display gate is isolated and validated on the vehicle.
 
 ## Building the portable core
 
@@ -171,14 +169,11 @@ Flash/RAM limits. See `docs/RELEASE_0.8.0_DEV.md`.
 
 ## 1.0 release candidate
 
-The three STM32F072 role images now build and link with the real ARM GCC toolchain
-against STM32CubeF0 on GitHub Actions. All existing-board memory gates pass:
+The three STM32F072 role images build and link with the real ARM GCC toolchain
+against STM32CubeF0 on GitHub Actions, and all existing-board Flash/RAM budget gates
+pass.
 
-- C1: 52,628 B Flash / 12,400 B RAM
-- C2: 39,036 B Flash / 12,400 B RAM
-- BH: 38,516 B Flash / 12,400 B RAM
-
-Debug, Release, AddressSanitizer/UndefinedBehaviorSanitizer and Cortex-M0 compilation
-gates are green. The software-complete candidate is `1.0.0-rc1`; final `1.0.0` requires the
-physical existing-board validation checklist in
+Debug, Release, AddressSanitizer/UndefinedBehaviorSanitizer, Cortex-M0 compilation
+and C1/C2/BH image gates are green. The diesel reference candidate is `1.0.0-rc2`;
+final `1.0.0` requires the physical existing-board validation checklist in
 [`docs/HARDWARE_VALIDATION_CHECKLIST.md`](docs/HARDWARE_VALIDATION_CHECKLIST.md).
