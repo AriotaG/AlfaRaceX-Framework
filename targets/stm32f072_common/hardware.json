@@ -93,5 +93,36 @@
     "visible_parameters": "0x0801E800",
     "log_snapshot": "0x0801E000",
     "page_bytes": 2048
+  },
+  "usb": {
+    "peripheral": "USB FS",
+    "vid": "0x0483",
+    "C1": {
+      "default_mode": "detached",
+      "cdc_pid": "0x5740",
+      "runtime_modes": [
+        "cdc_diagnostics",
+        "cdc_sniffer"
+      ]
+    },
+    "C2": {
+      "default_mode": "legacy_msc",
+      "msc_pid": "0x572A",
+      "runtime_modes": [
+        "legacy_msc",
+        "cdc_sniffer"
+      ],
+      "msc_read_only": true
+    },
+    "BH": {
+      "default_mode": "legacy_msc",
+      "msc_pid": "0x572A",
+      "runtime_modes": [
+        "legacy_msc",
+        "cdc_sniffer"
+      ],
+      "msc_read_only": true
+    },
+    "physical_backup_basis": "BACCAble V3.2.4"
   }
 }
