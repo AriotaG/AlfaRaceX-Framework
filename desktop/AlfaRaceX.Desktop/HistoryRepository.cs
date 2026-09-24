@@ -67,6 +67,12 @@ internal sealed class HistoryRepository
 
             CREATE INDEX IF NOT EXISTS IX_Events_CreatedUtc
                 ON Events(CreatedUtc DESC);
+
+            CREATE TABLE IF NOT EXISTS Settings (
+                Key TEXT PRIMARY KEY,
+                Value TEXT NOT NULL,
+                UpdatedUtc TEXT NOT NULL
+            );
             """;
         command.ExecuteNonQuery();
     }
@@ -193,6 +199,32 @@ internal sealed class HistoryRepository
         using var connection = Open();
         using var command = connection.CreateCommand();
         command.CommandText = "DELETE FROM Events;";
+        command.ExecuteNonQuery();
+    }
+
+    public string? GetSetting(string key)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Value FROM Settings WHERE Key = $key LIMIT 1;";
+        command.Parameters.AddWithValue("$key", key);
+        return command.ExecuteScalar() as string;
+    }
+
+    public void SetSetting(string key, string value)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO Settings(Key, Value, UpdatedUtc)
+            VALUES ($key, $value, $updated)
+            ON CONFLICT(Key) DO UPDATE SET
+                Value=excluded.Value,
+                UpdatedUtc=excluded.UpdatedUtc;
+            """;
+        command.Parameters.AddWithValue("$key", key);
+        command.Parameters.AddWithValue("$value", value);
+        command.Parameters.AddWithValue("$updated", DateTime.UtcNow.ToString("O"));
         command.ExecuteNonQuery();
     }
 
