@@ -62,8 +62,8 @@ jobs:
 
       - name: Smoke test published executable
         run: |
-          & .\publish\AlfaRaceX.exe --smoke-test
-          if ($LASTEXITCODE -ne 0) { throw "Published executable smoke test failed." }
+          $proc = Start-Process -FilePath ".\publish\AlfaRaceX.exe" -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "Published executable smoke test failed with code $($proc.ExitCode)." }
 
       - name: Install Velopack CLI
         run: dotnet tool install -g vpk --version 1.2.0
@@ -82,13 +82,12 @@ jobs:
         run: |
           $installRoot = Join-Path $env:RUNNER_TEMP "AlfaRaceX-Installed"
           if (Test-Path $installRoot) { Remove-Item $installRoot -Recurse -Force }
-          & .\artifacts\AlfaRaceX-Setup.exe --silent --installto $installRoot
-          if ($LASTEXITCODE -ne 0) { throw "Installer returned exit code $LASTEXITCODE." }
-          Start-Sleep -Seconds 2
+          $setupProc = Start-Process -FilePath ".\artifacts\AlfaRaceX-Setup.exe" -ArgumentList @("--silent","--installto",$installRoot) -Wait -PassThru
+          if ($setupProc.ExitCode -ne 0) { throw "Installer returned exit code $($setupProc.ExitCode)." }
           $exe = Get-ChildItem $installRoot -Recurse -Filter "AlfaRaceX.exe" | Select-Object -First 1
           if (-not $exe) { throw "Installed AlfaRaceX.exe not found." }
-          & $exe.FullName --smoke-test
-          if ($LASTEXITCODE -ne 0) { throw "Installed executable smoke test failed." }
+          $smokeProc = Start-Process -FilePath $exe.FullName -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($smokeProc.ExitCode -ne 0) { throw "Installed executable smoke test failed with code $($smokeProc.ExitCode)." }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
