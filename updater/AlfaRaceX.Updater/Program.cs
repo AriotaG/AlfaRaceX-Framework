@@ -10,7 +10,7 @@ internal static class Program
             "AlfaRaceX-Updater-startup.log");
 
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
         try
         {
@@ -20,6 +20,18 @@ internal static class Program
             SafeStartupLog("INFO", $"64-bit process: {Environment.Is64BitProcess}");
 
             ApplicationConfiguration.Initialize();
+
+            if (args.Any(a => string.Equals(
+                a,
+                "--smoke-test",
+                StringComparison.OrdinalIgnoreCase)))
+            {
+                SafeStartupLog("INFO", "Esecuzione smoke test Windows.");
+                using var smokeForm = new MainForm();
+                _ = smokeForm.Handle;
+                SafeStartupLog("PASS", "Smoke test Windows completato.");
+                return;
+            }
 
             Application.SetUnhandledExceptionMode(
                 UnhandledExceptionMode.CatchException);
