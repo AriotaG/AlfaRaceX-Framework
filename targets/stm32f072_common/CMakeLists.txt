@@ -30,6 +30,7 @@ else()
 endif()
 
 set(ARX_ROOT ${CMAKE_CURRENT_LIST_DIR}/../..)
+file(STRIP "${ARX_ROOT}/VERSION" ARX_FIRMWARE_VERSION_VALUE)
 
 file(GLOB ARX_CORE
   ${ARX_ROOT}/src/core/*.c
@@ -69,6 +70,9 @@ set(USB_DEVICE_SRC
   ${USB_DEVICE_DIR}/Core/Src/usbd_ctlreq.c
   ${USB_DEVICE_DIR}/Core/Src/usbd_ioreq.c
   ${USB_DEVICE_DIR}/Class/CDC/Src/usbd_cdc.c
+  ${USB_DEVICE_DIR}/Class/MSC/Src/usbd_msc.c
+  ${USB_DEVICE_DIR}/Class/MSC/Src/usbd_msc_bot.c
+  ${USB_DEVICE_DIR}/Class/MSC/Src/usbd_msc_scsi.c
 )
 
 add_executable(arx_${ARX_ROLE}.elf
@@ -87,7 +91,11 @@ add_executable(arx_${ARX_ROLE}.elf
   ${USB_DEVICE_SRC}
 )
 
-target_compile_definitions(arx_${ARX_ROLE}.elf PRIVATE ${CPU_DEFS} USE_HAL_DRIVER)
+target_compile_definitions(arx_${ARX_ROLE}.elf PRIVATE
+  ${CPU_DEFS}
+  USE_HAL_DRIVER
+  ARX_FIRMWARE_VERSION="${ARX_FIRMWARE_VERSION_VALUE}"
+)
 target_compile_options(arx_${ARX_ROLE}.elf PRIVATE
   -Os -ffunction-sections -fdata-sections -Wall -Wextra -Wpedantic -Werror
 )
@@ -108,6 +116,7 @@ target_include_directories(arx_${ARX_ROLE}.elf PRIVATE
   ${CMSIS_DIR}/Device/ST/STM32F0xx/Include
   ${USB_DEVICE_DIR}/Core/Inc
   ${USB_DEVICE_DIR}/Class/CDC/Inc
+  ${USB_DEVICE_DIR}/Class/MSC/Inc
 )
 
 target_link_options(arx_${ARX_ROLE}.elf PRIVATE
