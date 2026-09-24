@@ -528,12 +528,26 @@ static void runtime_bind_preferences(ArxRuntime *rt,uint32_t now_ms,bool apply_u
             rt->sniffer.enabled=false;
         }
 
-        if(rt->config.elm327_enabled)
-            (void)arx_usb_mode_request(&rt->usb_mode,ARX_USB_MODE_DIAGNOSTIC,now_ms);
-        else if(rt->config.sniffer_enabled)
-            (void)arx_usb_mode_request(&rt->usb_mode,ARX_USB_MODE_SNIFFER,now_ms);
-        else
-            (void)arx_usb_mode_request(&rt->usb_mode,ARX_USB_MODE_NONE,now_ms);
+#if ARX_COMPILE_C1
+        if(rt->role==ARX_RUNTIME_C1){
+            rt->elm.enabled=rt->config.elm327_enabled;
+            if(rt->config.elm327_enabled)
+                (void)arx_usb_mode_request(&rt->usb_mode,ARX_USB_MODE_DIAGNOSTIC,now_ms);
+            else if(rt->config.sniffer_enabled)
+                (void)arx_usb_mode_request(&rt->usb_mode,ARX_USB_MODE_SNIFFER,now_ms);
+            else
+                (void)arx_usb_mode_request(&rt->usb_mode,ARX_USB_MODE_NONE,now_ms);
+        }else
+#endif
+        {
+            /* The physical BACCAble V3.2.4 backup proves that BH/C2 expose
+               USB MSC when they are not temporarily used as CAN sniffers. */
+            (void)arx_usb_mode_request(
+                &rt->usb_mode,
+                rt->config.sniffer_enabled?ARX_USB_MODE_SNIFFER:ARX_USB_MODE_LEGACY_MSC,
+                now_ms
+            );
+        }
     }
 }
 
@@ -965,6 +979,11 @@ void arx_runtime_init(
     memset(rt->visible_params,1,sizeof(rt->visible_params));
     arx_performance_init(&rt->performance);
     arx_max_hold_init(&rt->max_hold);
+    if(role==ARX_RUNTIME_C1){
+        arx_elm327_init(&rt->elm);
+        arx_elm_router_init(&rt->elm_router);
+        arx_elm_transaction_init(&rt->elm_transaction);
+    }
 #endif
 #if ARX_COMPILE_C2
     arx_dyno_init(&rt->dyno);
