@@ -340,15 +340,20 @@ internal sealed class StepStrip : Control
         using var barBg = new SolidBrush(Color.FromArgb(25, 40, 52));
         e.Graphics.FillRectangle(barBg, bar);
 
-        int fill = (int)Math.Round(bar.Width * (_progress / 100d));
-        if (fill > 0)
+        int progressFill = (int)Math.Round(bar.Width * (_progress / 100d));
+        if (progressFill > 0)
         {
             using var barFill = new LinearGradientBrush(
-                new Rectangle(bar.X, bar.Y, Math.Max(fill, 1), bar.Height),
+                new Rectangle(bar.X, bar.Y, Math.Max(progressFill, 1), bar.Height),
                 ArxTheme.Red,
                 Color.FromArgb(255, 38, 60),
                 0f);
-            e.Graphics.FillRectangle(barFill, bar.X, bar.Y, fill, bar.Height);
+            e.Graphics.FillRectangle(
+                barFill,
+                bar.X,
+                bar.Y,
+                progressFill,
+                bar.Height);
         }
 
         var pct = new Rectangle(ClientSize.Width - 60, Height - 27, 54, 22);
