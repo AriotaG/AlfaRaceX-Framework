@@ -61,7 +61,17 @@ jobs:
       - name: Run Windows startup smoke test
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath ".\out\AlfaRaceX-Updater.exe" -ArgumentList "--smoke-test" -PassThru -Wait
+          $p = Start-Process -FilePath ".\out\AlfaRaceX-Updater.exe" -ArgumentList "--smoke-test" -PassThru
+          if (-not $p.WaitForExit(30000)) {
+            Stop-Process -Id $p.Id -Force
+            if (Test-Path ".\out\AlfaRaceX-Updater-startup.log") {
+              Get-Content ".\out\AlfaRaceX-Updater-startup.log"
+            }
+            throw "Windows smoke test timed out after 30 seconds."
+          }
+          if (Test-Path ".\out\AlfaRaceX-Updater-startup.log") {
+            Get-Content ".\out\AlfaRaceX-Updater-startup.log"
+          }
           if ($p.ExitCode -ne 0) {
             throw "Windows smoke test failed with exit code $($p.ExitCode)"
           }
