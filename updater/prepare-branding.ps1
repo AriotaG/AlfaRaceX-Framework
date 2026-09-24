@@ -9,11 +9,16 @@ $iconPng = Join-Path $assets "ARX-256.png"
 $iconIco = Join-Path $assets "ARX.ico"
 $splashPng = Join-Path $assets "AlfaRaceX-Splash.png"
 $splashJpg = Join-Path $assets "AlfaRaceX-Splash.jpg"
+$heroPng = Join-Path $assets "ARX-Hero.png"
+$heroJpg = Join-Path $assets "ARX-Hero.jpg"
 
 rsvg-convert -w 256 -h 256 (Join-Path $branding "ARX.svg") -o $iconPng
 convert $iconPng -define icon:auto-resize=256,128,64,48,32,16 $iconIco
 
 rsvg-convert -w 960 -h 540 (Join-Path $branding "Splash.svg") -o $splashPng
 convert $splashPng -quality 90 $splashJpg
+
+rsvg-convert -w 1400 -h 430 (Join-Path $branding "Hero.svg") -o $heroPng
+convert $heroPng -quality 91 $heroJpg
 
 Write-Host "AlfaRaceX branding assets prepared."
