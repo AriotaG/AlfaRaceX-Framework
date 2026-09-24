@@ -54,14 +54,16 @@ static bool enqueue_can(
     return true;
 }
 
-#if ARX_COMPILE_C1 || ARX_COMPILE_C2 || ARX_COMPILE_BH
+#if ARX_COMPILE_C1 || ARX_COMPILE_C2
 static bool ic_push(ArxRuntime *rt,const uint8_t *payload,size_t length) {
     if(!rt||!payload||length==0u)return false;
     ArxInterchipFrame f;
     arx_interchip_frame_build(&f,payload,length);
     return arx_interchip_queue_push(&rt->interchip.tx,&f);
 }
+#endif
 
+#if ARX_COMPILE_C1 || ARX_COMPILE_C2 || ARX_COMPILE_BH
 static bool ic_push_link(ArxRuntime *rt,const ArxLinkFrame *link) {
     if(!rt||!link)return false;
     ArxInterchipFrame f;
