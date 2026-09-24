@@ -20,6 +20,11 @@ int main(void) {
     assert(f.raw[8]==0 && f.raw[10]==0x07 && f.raw[11]==0xF0);
     assert(f.raw[12]==0x01 && f.raw[13]==0x2C);
     assert((f.raw[14]&ARX_LINK_CFG_AUTOFC)!=0);
+    assert((f.raw[2]&ARX_LINK_FLAG_EXTID)==0u);
+
+    arx_link_build_config(&f,ARX_LINK_TO_C2,0x18DAF110u,0x1FFFFFFFu,200u,true,9);
+    assert(arx_link_validate(&f));
+    assert((f.raw[2]&ARX_LINK_FLAG_EXTID)!=0u);
 
     f.raw[5]^=1u;
     assert(!arx_link_validate(&f));
