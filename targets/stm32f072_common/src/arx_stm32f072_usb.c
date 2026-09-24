@@ -78,7 +78,7 @@ static const uint8_t lang_desc[USB_LEN_LANGID_STR_DESC]={
 static const char msc_version_text[]="ALFARACEX V." ARX_FIRMWARE_VERSION "\r\n";
 
 static int8_t msc_inquiry[36]={
-    0x00,0x80,0x02,0x02,31,0x00,0x00,0x00,
+    0x00,(int8_t)0x80,0x02,0x02,31,0x00,0x00,0x00,
     'A','R','X',' ',' ',' ',' ',' ',
     'A','l','f','a','R','a','c','e','X',' ','M','S','C',' ',' ',' ',
     'R','C','5',' '
