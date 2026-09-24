@@ -1,4 +1,4 @@
-# Hardware validation checklist for 1.0
+# Hardware validation checklist for 1.0 (RC3 gate)
 
 This checklist is the final gate between a software-complete release candidate and
 the first stable 1.0 release. It uses the existing board; no hardware replacement is
@@ -28,6 +28,11 @@ With transmission-producing features disabled:
 - BH receives 125 kbit/s traffic
 - RPM, speed, gear and DNA decode correctly
 - oil / DPF / temperatures and other telemetry agree with diagnostic equipment
+- all 55 diesel BACCAble parameter pages appear in the expected order
+- paired parameter pages render both values correctly
+- battery SoC from UDS DID 0x19BD agrees with independent diagnostics
+- battery current decoded from C1 frame 0x41A has plausible sign and scale
+- active-page UDS polling remains stable at the 500 ms cadence
 - menu text and steering-button events are correct
 - persistent settings survive ignition cycles
 - 3.5 s low-consumption entry and wake behavior are correct
@@ -40,7 +45,7 @@ Enable one feature at a time and verify its exact bus, frame, timing, restoratio
 ignition-cycle behavior:
 
 1. Smart Start/Stop
-2. shift indicator
+2. shift indicator (reference behavior only)
 3. DPF alert
 4. ACC/HAS virtual controls
 5. parking mute
@@ -56,6 +61,10 @@ ignition-cycle behavior:
 15. ESC/TC display/control synchronization
 
 For every feature confirm that disabling it restores normal ECU control.
+
+Dynamic-mode shift display forcing is not part of the 1.0 Stable gate yet. It
+remains an AlfaRaceX experiment until the MY20 IPC display-enabling condition is
+isolated and separately validated.
 
 ## Phase 4 — soak
 

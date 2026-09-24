@@ -59,6 +59,11 @@ typedef struct {
     bool telemetry_enabled;
     bool diagnostics_enabled;
     bool sgw_detection_enabled;
+    /*
+     * Reserved for the MY20 IPC-gated Dynamic shift experiment.
+     * Intentionally not consumed by the stable runtime until the display gate
+     * is identified and physically validated.
+     */
     bool dynamic_shift_in_dynamic_enabled;
 } ArxRuntimeConfig;
 

@@ -2,8 +2,10 @@
 #include "arx/features/arx_dpf_alert.h"
 #include "arx/features/arx_odometer.h"
 #include "arx/features/arx_acc.h"
+#include "arx/arx_feature_catalog.h"
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 int main(void) {
     ArxCanFrame src = {.bus=ARX_BUS_C1,.id=0x4B1,.dlc=8};
@@ -32,6 +34,18 @@ int main(void) {
     ArxCanFrame pad = {.bus=ARX_BUS_C1,.id=0x2FA,.dlc=3,.data={0x10,0x00,0x00}};
     assert(arx_acc_transform_2fa(&acc,&pad,0,false,false,1000,&out));
     assert((out.data[1] & 0x10u) != 0u);
+
+    size_t feature_count=0u;
+    const ArxFeatureDescriptor *catalog=arx_feature_catalog(&feature_count);
+    bool found_dynamic_shift=false;
+    for(size_t i=0u;i<feature_count;i++){
+        if(!strcmp(catalog[i].id,"dynamic_shift_display")){
+            found_dynamic_shift=true;
+            assert(catalog[i].maturity==ARX_FEATURE_EXPERIMENTAL_DISABLED);
+            assert(catalog[i].requires_vehicle_actuation);
+        }
+    }
+    assert(found_dynamic_shift);
 
     puts("feature tests: OK");
     return 0;
