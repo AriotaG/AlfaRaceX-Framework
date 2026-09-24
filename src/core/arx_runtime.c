@@ -88,7 +88,8 @@ static void elm_usb_compact(ArxRuntime *rt) {
         return;
     }
     const uint16_t remain=(uint16_t)(rt->elm_usb_tx_len-rt->elm_usb_tx_off);
-    memmove(rt->elm_usb_tx,&rt->elm_usb_tx[rt->elm_usb_tx_off],remain);
+    for(uint16_t i=0u;i<remain;i++)
+        rt->elm_usb_tx[i]=rt->elm_usb_tx[rt->elm_usb_tx_off+i];
     rt->elm_usb_tx_len=remain;
     rt->elm_usb_tx_off=0u;
 }
@@ -120,7 +121,8 @@ static void elm_usb_prompt(ArxRuntime *rt) {
 }
 
 static char elm_hex(uint8_t n) {
-    return (char)(n<10u?('0'+n):('A'+n-10u));
+    static const char digits[]="0123456789ABCDEF";
+    return digits[n&0x0Fu];
 }
 
 static void elm_usb_hex_byte(ArxRuntime *rt,uint8_t value) {
