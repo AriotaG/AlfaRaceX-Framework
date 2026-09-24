@@ -1271,6 +1271,41 @@ void arx_runtime_usb_command(ArxRuntime *rt,uint32_t now_ms) {
     arx_usb_mode_note_command(&rt->usb_mode,now_ms);
 }
 
+void arx_runtime_usb_rx(
+    ArxRuntime *rt,const uint8_t *data,size_t length,uint32_t now_ms
+) {
+    if(!rt||!data||length==0u)return;
+    arx_runtime_usb_command(rt,now_ms);
+
+#if ARX_COMPILE_C1
+    if(rt->role!=ARX_RUNTIME_C1||
+       rt->usb_mode.mode!=ARX_USB_MODE_DIAGNOSTIC)return;
+
+    for(size_t i=0u;i<length;i++){
+        const uint8_t ch=data[i];
+        if(ch=='\n')continue;
+        if(ch=='\r'){
+            elm_process_line(rt,now_ms);
+            continue;
+        }
+        if(ch==0x08u||ch==0x7Fu){
+            if(rt->elm_line_len)rt->elm_line_len--;
+            continue;
+        }
+        if(ch<0x20u||ch>0x7Eu)continue;
+        if(rt->elm_line_len+1u>=sizeof(rt->elm_line)){
+            rt->elm_line_len=0u;
+            (void)elm_usb_text(rt,"?");
+            elm_usb_prompt(rt);
+            continue;
+        }
+        rt->elm_line[rt->elm_line_len++]=(char)ch;
+    }
+#else
+    (void)now_ms;
+#endif
+}
+
 #if ARX_COMPILE_C1
 static void interchip_c1(ArxRuntime *rt,uint8_t cmd) {
     switch(cmd){
@@ -1676,7 +1711,31 @@ static void periodic_usb(ArxRuntime *rt,uint32_t now_ms) {
         .user=rt
     };
     (void)arx_usb_mode_process(&rt->usb_mode,now_ms,&usb_ops);
-    if(!rt->ops.usb_send||!rt->sniffer.enabled)return;
+
+#if ARX_COMPILE_C1
+    if(rt->role==ARX_RUNTIME_C1){
+        elm_tick(rt,now_ms);
+        if(rt->ops.usb_send&&
+           rt->usb_mode.mode==ARX_USB_MODE_DIAGNOSTIC&&
+           rt->usb_mode.state==ARX_USB_CONFIGURED&&
+           rt->elm_usb_tx_off<rt->elm_usb_tx_len){
+            const uint16_t remain=(uint16_t)(rt->elm_usb_tx_len-rt->elm_usb_tx_off);
+            const size_t n=remain>64u?64u:remain;
+            if(rt->ops.usb_send(&rt->elm_usb_tx[rt->elm_usb_tx_off],n,rt->ops.user)){
+                rt->elm_usb_tx_off=(uint16_t)(rt->elm_usb_tx_off+n);
+                rt->usb_bytes+=(uint32_t)n;
+                if(rt->elm_usb_tx_off==rt->elm_usb_tx_len){
+                    rt->elm_usb_tx_off=0u;
+                    rt->elm_usb_tx_len=0u;
+                }
+            }
+        }
+    }
+#endif
+
+    if(!rt->ops.usb_send||!rt->sniffer.enabled||
+       rt->usb_mode.mode!=ARX_USB_MODE_SNIFFER||
+       rt->usb_mode.state!=ARX_USB_CONFIGURED)return;
 
     uint8_t chunk[ARX_SNIFFER_USB_CHUNK];
     size_t n=arx_sniffer_peek_chunk(
@@ -1720,9 +1779,17 @@ size_t arx_runtime_drain_interchip(ArxRuntime *rt,uint32_t now_ms,size_t budget)
     if(!rt||!rt->ops.interchip_send)return 0u;
     size_t sent=0u;
 
-    while(sent<budget&&arx_interchip_tx_allowed(&rt->interchip,now_ms)){
+    while(sent<budget){
         const ArxInterchipFrame *f=NULL;
         if(!arx_interchip_queue_peek(&rt->interchip.tx,&f))break;
+
+        const bool diagnostic=
+            f->bytes[0]>=ARX_LINK_TO_C2&&f->bytes[0]<=ARX_LINK_TO_MASTER;
+        const bool allowed=diagnostic
+            ?(now_ms>=rt->interchip.boot_ignore_ms)
+            :arx_interchip_tx_allowed(&rt->interchip,now_ms);
+        if(!allowed)break;
+
         if(!rt->ops.interchip_send(f->bytes,rt->ops.user))break;
 
         arx_interchip_queue_commit(&rt->interchip.tx);
@@ -1730,8 +1797,9 @@ size_t arx_runtime_drain_interchip(ArxRuntime *rt,uint32_t now_ms,size_t budget)
         rt->interchip_tx_frames++;
         sent++;
 
-        /* The normal wire contract deliberately limits the master to one frame/slot. */
-        if(rt->role==ARX_RUNTIME_C1)break;
+        /* Normal master traffic keeps the deployed 250 ms slot. Diagnostic
+           frames use their own framing/checksum and may drain consecutively. */
+        if(rt->role==ARX_RUNTIME_C1&&!diagnostic)break;
     }
     return sent;
 }
