@@ -8,6 +8,7 @@
 #define ARX_INTERCHIP_FRAME_SIZE 19u
 #define ARX_INTERCHIP_QUEUE_SIZE 10u
 #define ARX_INTERCHIP_PAD        0x20u
+#define ARX_INTERCHIP_LAST_WIRE_DEST 0x10u
 
 enum {
     ARX_IC_TO_C1                = 0x01u,
@@ -104,6 +105,8 @@ typedef struct {
 } ArxInterchip;
 
 void arx_interchip_init(ArxInterchip *link, ArxInterchipRole role);
+
+bool arx_interchip_start_byte_valid(uint8_t value);
 
 void arx_interchip_frame_build(
     ArxInterchipFrame *frame,
