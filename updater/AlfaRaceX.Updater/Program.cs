@@ -12,6 +12,11 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        bool smokeRequested = args.Any(a => string.Equals(
+            a,
+            "--smoke-test",
+            StringComparison.OrdinalIgnoreCase));
+
         try
         {
             SafeStartupLog("START", $"AlfaRaceX Updater {AppConstants.UpdaterVersion}");
@@ -21,10 +26,7 @@ internal static class Program
 
             ApplicationConfiguration.Initialize();
 
-            if (args.Any(a => string.Equals(
-                a,
-                "--smoke-test",
-                StringComparison.OrdinalIgnoreCase)))
+            if (smokeRequested)
             {
                 SafeStartupLog("INFO", "Esecuzione smoke test Windows.");
                 using var smokeForm = new MainForm();
@@ -56,6 +58,15 @@ internal static class Program
         }
         catch (Exception ex)
         {
+            if (smokeRequested)
+            {
+                SafeStartupLog(
+                    "FATAL",
+                    $"{ex.GetType().FullName}: {ex.Message}{Environment.NewLine}{ex.StackTrace}");
+                Environment.ExitCode = 1;
+                return;
+            }
+
             HandleFatal("Avvio AlfaRaceX Updater non riuscito", ex);
         }
     }
