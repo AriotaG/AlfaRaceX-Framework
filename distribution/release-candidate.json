@@ -1,14 +1,14 @@
 {
   "product": "AlfaRaceX",
   "channel": "Release Candidate",
-  "version": "1.0.0-rc4",
+  "version": "1.0.0-rc5",
   "targets": [
     {
       "id": "BH",
       "label": "Modulo BH",
       "portHint": "la porta USB sinistra",
-      "url": "https://github.com/AriotaG/AlfaRaceX-Framework/releases/download/1.0.0-rc4/AlfaRaceX-BH.hex",
-      "sha256": "75f983851bcab1e98fe7aa9734311aada75232f8749d3acfaaf1fc8b9b561bc2",
+      "url": "https://github.com/AriotaG/AlfaRaceX-Framework/releases/download/1.0.0-rc5/AlfaRaceX-BH.hex",
+      "sha256": "18be3d608448e645cfc50440d7971e1806a02f27d7854a71bb83fb7c6bc29b45",
       "applicationStart": 134217728,
       "applicationLimitExclusive": 134279168
     },
@@ -16,8 +16,8 @@
       "id": "C2",
       "label": "Modulo C2",
       "portHint": "la porta USB centrale",
-      "url": "https://github.com/AriotaG/AlfaRaceX-Framework/releases/download/1.0.0-rc4/AlfaRaceX-C2.hex",
-      "sha256": "22de3ecefd998657290fd1edf997f833ebdd4f0a23a7703cdb0ab8828f48d99c",
+      "url": "https://github.com/AriotaG/AlfaRaceX-Framework/releases/download/1.0.0-rc5/AlfaRaceX-C2.hex",
+      "sha256": "da36cef9d44f6f179c0c96faa7771445b74772b007deb9bc146194267adf72db",
       "applicationStart": 134217728,
       "applicationLimitExclusive": 134279168
     },
@@ -25,8 +25,8 @@
       "id": "C1",
       "label": "Modulo C1",
       "portHint": "la porta USB destra",
-      "url": "https://github.com/AriotaG/AlfaRaceX-Framework/releases/download/1.0.0-rc4/AlfaRaceX-C1.hex",
-      "sha256": "ddf44ee52403b8fde75af45108e304c2df4964deb1439adfaa91c256b549b3c1",
+      "url": "https://github.com/AriotaG/AlfaRaceX-Framework/releases/download/1.0.0-rc5/AlfaRaceX-C1.hex",
+      "sha256": "1ba990ded8ca2d6d2ec3b4762ecb605433fbf0033472c0da9c51a9fd110dd4d4",
       "applicationStart": 134217728,
       "applicationLimitExclusive": 134316032
     }
