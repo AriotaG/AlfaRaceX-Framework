@@ -33,7 +33,7 @@ The replacement layout keeps the deployed memory map:
 - statistics page: `0x0801F000`
 - settings page: `0x0801F800`
 
-A physical BACCAble V3.2.4 backup used for RC5 validation also contains the
+A physical reference-firmware backup used for RC5 validation also contains the
 BH/C2 legacy MSC image starting at `0x08010000`. That region is outside the
 60 KiB AlfaRaceX C2/BH application image. The AlfaRaceX updater erases only pages
 touched by the selected HEX image, so it does not require a full-chip erase and
