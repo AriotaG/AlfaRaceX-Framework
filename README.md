@@ -26,6 +26,14 @@ ARX VehicleState
 The first reference target is an Alfa Romeo Stelvio MY20 2.2 JTDm 210 HP Q4 with
 ZF 8-speed automatic transmission.
 
+## AlfaRaceX Updater
+
+![AlfaRaceX Updater dashboard](docs/images/alfaracex-updater-dashboard.svg)
+
+The Windows updater uses live manifest data for version, checksums, module state,
+progress and logs. The artwork is presentation-only; operational values remain
+dynamic UI elements.
+
 ## Current baseline
 
 The current release candidate is **1.0.0-rc5**. It is targeted at the existing
