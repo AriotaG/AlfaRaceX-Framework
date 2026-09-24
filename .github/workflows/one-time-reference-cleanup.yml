@@ -1,0 +1,76 @@
+name: One-time repository reference cleanup
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/one-time-reference-cleanup.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rewrite release notes and move rewritten tags
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          cat > /tmp/rc2.md <<'EOF'
+          # AlfaRaceX 1.0.0-rc2
+
+          This release candidate hardens reference telemetry parity for the Alfa Romeo Stelvio MY20 2.2 JTDm diesel Q4 target.
+
+          ## RC2 corrections
+
+          - restores the exact 55-page diesel dashboard order used by the reference firmware
+          - restores paired dashboard pages rather than treating every signal as a separate page
+          - adds battery State of Charge through UDS DID `0x19BD`
+          - adds battery current decoding from native C1 frame `0x41A`
+          - keeps native `0x41A` SoC as a startup fallback until the first UDS SoC reply
+          - adds a bounded telemetry cache
+          - polls the active UDS dashboard page at the reference-compatible 500 ms cadence
+          - decodes the reply and pushes the formatted 18-character value string to BH
+          - restores reference-style formatting for numeric and enum dashboard values
+          - adds regression tests for the 55-page contract, battery decode, formatter and end-to-end UDS request/decode/dashboard path
+
+          RC2 remains a prerelease candidate for the reference MY20 diesel profile.
+          EOF
+
+          cat > /tmp/rc3.md <<'EOF'
+          # AlfaRaceX 1.0.0-rc3
+
+          This release candidate is a post-RC2 consistency and validation hardening release.
+
+          ## Corrections
+
+          - catalogues Dynamic Shift display forcing as an experimental-disabled feature
+          - locks that classification with a regression test
+          - aligns the hardware validation checklist with the 55-page diesel telemetry contract
+          - adds explicit validation checks for battery SoC DID `0x19BD`, battery current frame `0x41A`, paired pages and 500 ms telemetry polling
+          - refreshes the release gate with the actual ARM memory figures
+
+          The physical-validation target remains the existing three-controller STM32F072 reference hardware installed on the Alfa Romeo Stelvio MY20 2.2 JTDm 210 HP Q4.
+
+          RC3 remains a prerelease.
+          EOF
+
+          gh release edit 1.0.0-rc2 --notes-file /tmp/rc2.md
+          gh release edit 1.0.0-rc3 --notes-file /tmp/rc3.md
+
+          git tag -f 1.0.0-rc2 7995f00c3c414c79caf8d419d6c63c9aacd5c6b1
+          git tag -f 1.0.0-rc3 c60d4555cbed228d19b729640db54b40ac4f0ece
+          git tag -f 1.0.0-rc4 3920cfa381d600a52c5f602ad2bafe22d4ebb319
+          git tag -f 1.0.0-rc5 bfb62ba19f5c06492a7c5dae36d3b1b6179343fc
+          git tag -f updater-v0.3.0 75b91c00b8ae8f67ff8538306cadfb5fc95df55e
+          git tag -f updater-v0.4.0 b2f42247df35205b673c4edb8762f586b335b09d
+
+          git push origin --force             refs/tags/1.0.0-rc2             refs/tags/1.0.0-rc3             refs/tags/1.0.0-rc4             refs/tags/1.0.0-rc5             refs/tags/updater-v0.3.0             refs/tags/updater-v0.4.0
