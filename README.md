@@ -26,6 +26,66 @@ ARX VehicleState
 The first reference target is an Alfa Romeo Stelvio MY20 2.2 JTDm 210 HP Q4 with
 ZF 8-speed automatic transmission.
 
+## Cosa fa AlfaRaceX / What AlfaRaceX does
+
+AlfaRaceX non è soltanto un updater o un'interfaccia diagnostica: il progetto riunisce firmware embedded, diagnostica CAN/UDS, telemetria, funzioni veicolo, strumenti di sviluppo e un'applicazione Windows dedicata.
+
+**Legenda / Legend:** ✅ implementato nel core / implemented in core · 🔬 implementato ma con validazione fisica su hardware/veicolo ancora in corso / implemented, physical hardware/vehicle validation still pending · 🧪 sperimentale o in sviluppo / experimental or in development.
+
+### Funzioni implementate / Implemented capabilities
+
+- ✅ **Smart Start/Stop** — gestione automatica Start/Stop / automatic Start/Stop management.
+- ✅ **Shift Indicator** — indicatore cambio marcia con soglie configurabili / configurable shift indicator.
+- ✅ **MY23 Shift Hint** — supporto indicazione cambio marcia MY23 / MY23 shift-hint support.
+- ✅ **ESC/TC Customizer** — logiche personalizzate di gestione ESC/TC / custom ESC/TC control logic.
+- ✅ **Race Display Mask** — gestione delle maschere Race su quadro/infotainment compatibile / Race display-mask handling on compatible cluster/infotainment.
+- ✅ **DYNO mode** — gestione della sequenza diagnostica dedicata / dedicated diagnostic sequence handling.
+- ✅ **Q4 / AWD control** — controllo della funzione Q4/AWD tramite sequenze diagnostiche dedicate / Q4/AWD control through dedicated diagnostic sequences.
+- ✅ **Front Brake Override / Launch Assist** — logica di gestione freni anteriori e rilascio su soglia coppia / front-brake control and torque-threshold release logic.
+- ✅ **ACC Virtual Pad** — simulazione dei comandi ACC compatibili / compatible ACC virtual control input.
+- ✅ **ACC Autostart** — gestione automatica della ripartenza ACC nelle condizioni previste / automatic ACC restart logic under supported conditions.
+- ✅ **HAS Virtual Pad** — simulazione del comando HAS sui veicoli compatibili / virtual HAS command on compatible vehicles.
+- ✅ **DPF Regeneration Alert** — rilevamento e segnalazione della rigenerazione DPF / DPF regeneration detection and alerting.
+- ✅ **Read DTC** — lettura errori diagnostici con supporto ISO-TP / diagnostic trouble-code reading with ISO-TP support.
+- ✅ **Clear DTC** — cancellazione DTC sulle reti supportate / DTC clearing on supported buses.
+- ✅ **Seat-belt Alarm Configuration** — gestione della configurazione dell'avviso cinture / seat-belt warning configuration.
+- ✅ **Odometer Blink Mask** — gestione del lampeggio odometro / odometer-blink masking.
+- ✅ **CAN Route Service** — cattura e instradamento di messaggi CAN standard ed extended / standard and extended CAN capture/routing.
+- ✅ **Diagnostic Intrusion Guard** — logica di protezione contro accessi diagnostici indesiderati / diagnostic intrusion-protection logic.
+- ✅ **Pedal Controller** — profili Auto, Bypass, A, N, D, R, Hybrid e Kids con controllo, CRC e retry / Auto, Bypass, A, N, D, R, Hybrid and Kids profiles with CRC and retry handling.
+- ✅ **Park Mute** — gestione temporanea dell'avviso parcheggio anteriore / temporary front parking-alert mute.
+- 🔬 **Park Mirror** — gestione automatica specchi in retromarcia con memorizzazione posizione / automatic reverse mirror positioning with stored position; physical validation pending.
+- ✅ **Comfort Windows** — gestione comfort apertura/chiusura finestrini / comfort window open/close functions.
+- ✅ **QV Exhaust Flap** — controllo valvola scarico sui veicoli compatibili / exhaust-flap control on compatible vehicles.
+- 🔬 **LED Strip Meter** — renderer e pilotaggio WS2812 per barra LED / WS2812 LED-strip rendering and drive path; hardware signal validation pending.
+- 🔬 **Low-consume / Wake-up management** — logiche sleep, wake-up e controllo transceiver / sleep, wake-up and transceiver-control logic; hardware validation pending.
+- 🔬 **CAN Sniffer** — acquisizione binaria multi-bus con buffering e streaming USB / multi-bus binary CAN capture with buffering and USB streaming; physical USB validation pending.
+- 🔬 **ELM-compatible Diagnostics** — interprete AT, ISO-TP, filtri, flow control e routing C1/C2/BH / AT interpreter, ISO-TP, filters, flow control and C1/C2/BH routing; physical USB/CAN validation pending.
+- 🔬 **Dashboard & Menu** — menu principale, setup e rendering valori sul quadro / main menu, setup menu and cluster value rendering; vehicle replay validation pending.
+- 🔬 **55-page Diesel Telemetry** — database telemetrico completo con polling UDS a 500 ms, inclusi SoC batteria e corrente batteria / complete 55-page diesel telemetry database with 500 ms UDS polling, including battery SoC and battery current; physical replay validation pending.
+- ✅ **Performance Statistics** — tempi 0–100 e 100–200 km/h, best time e aggiornamento statistiche / 0–100 and 100–200 km/h timing, best-time tracking and statistics.
+- ✅ **Max Hold** — memorizzazione dei valori massimi per i parametri supportati / maximum-value hold for supported parameters.
+- ✅ **Persistent Runtime Configuration** — configurazione persistente con migrazione, CRC e modello dual-slot / persistent configuration with migration, CRC and dual-slot model.
+- 🔬 **Log export** — esportazione CSV portabile; binding filesystem target ancora da completare / portable CSV export; target filesystem binding still pending.
+- ✅ **Inter-controller protocol** — protocollo C1/C2/BH a 19 byte con messaggi diagnostici prioritari / 19-byte C1/C2/BH protocol with priority diagnostic messages.
+- ✅ **USB service path** — CDC per C1 e gestione MSC/CDC sui ruoli BH/C2 / C1 CDC plus BH/C2 MSC/CDC lifecycle handling.
+- ✅ **AlfaRaceX Desktop** — applicazione Windows .NET 8/WPF con WebView2 locale, aggiornamento firmware DFU, backup, ripristino, log e cronologia SQLite / Windows .NET 8/WPF application with local WebView2 UI, DFU firmware update, backup, restore, logs and SQLite history.
+
+### In sviluppo / In development
+
+- 🧪 **Dynamic Shift Display** — estensione AlfaRaceX per visualizzare lo shift indicator anche in modalità Dynamic; il gate IPC MY20 è ancora da isolare e validare / AlfaRaceX extension to display the shift indicator in Dynamic mode; the MY20 IPC display gate still needs isolation and validation.
+- 🧪 **Remote Start** — funzione studiata ma esclusa dal profilo stabile finché non sarà completata e validata / under development and excluded from the stable profile until completed and validated.
+- 🧪 **Fuel-pump force test** — percorso diagnostico sperimentale che richiede ulteriore revisione UDS/security / experimental diagnostic path requiring further UDS/security review.
+- 🧪 **Wireless AlfaRaceX hardware** — interfaccia OBD compatta con connettività Wi-Fi/Bluetooth integrata per comunicazione, configurazione e diagnostica senza cavo / compact OBD interface with integrated Wi-Fi/Bluetooth for cable-free communication, configuration and diagnostics.
+- 🧪 **Wireless firmware/configuration workflow** — aggiornamento e configurazione wireless del dispositivo, mantenendo USB-C come canale di servizio / wireless device update and configuration while retaining USB-C as the service channel.
+- 🧪 **Android Auto / Apple CarPlay integration research** — studio dell'integrazione con l'infotainment tramite un percorso wireless dedicato; non è ancora una funzione disponibile / research into dedicated wireless infotainment integration; not yet an available feature.
+- 🧪 **Native infotainment performance views** — ricerca sulle schermate/widget performance native dell'infotainment dove tecnicamente supportate / research into native infotainment performance views/widgets where technically supported.
+- 🔬 **Full physical validation** — bench test, validazione passiva su veicolo e test controllati delle funzioni attive sono gli ultimi gate prima della promozione a 1.0.0 Stable / bench testing, passive in-vehicle validation and controlled active-feature tests are the remaining gates before 1.0.0 Stable.
+
+Per lo stato tecnico dettagliato di ogni funzione vedere [FEATURE_MATRIX](docs/FEATURE_MATRIX.md), [FUNCTION_AUDIT](docs/FUNCTION_AUDIT.md) e [REPLACEMENT_GATE](docs/REPLACEMENT_GATE.md).
+
+For the detailed engineering status of each function see [FEATURE_MATRIX](docs/FEATURE_MATRIX.md), [FUNCTION_AUDIT](docs/FUNCTION_AUDIT.md) and [REPLACEMENT_GATE](docs/REPLACEMENT_GATE.md).
+
 ## AlfaRaceX Desktop
 
 ![AlfaRaceX Desktop visual reference](docs/images/alfaracex-updater-dashboard.jpg)
