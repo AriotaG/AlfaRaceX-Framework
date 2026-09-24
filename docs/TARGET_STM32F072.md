@@ -58,7 +58,7 @@ configuration to C2/BH, matching the deployed settling interval.
 
 ## USB
 
-RC5 aligns the target with the physical BACCAble V3.2.4 backup:
+RC5 aligns the target with the physical reference-firmware backup:
 
 - C1 owns the host-facing CDC diagnostics/sniffer interface (VID 0x0483, PID 0x5740).
 - C2 and BH enumerate by default as read-only Mass Storage (VID 0x0483, PID 0x572A), matching the class/subclass/protocol observed in the deployed images.
