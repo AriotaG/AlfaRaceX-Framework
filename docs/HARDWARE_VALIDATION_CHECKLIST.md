@@ -28,7 +28,7 @@ With transmission-producing features disabled:
 - BH receives 125 kbit/s traffic
 - RPM, speed, gear and DNA decode correctly
 - oil / DPF / temperatures and other telemetry agree with diagnostic equipment
-- all 55 diesel BACCAble parameter pages appear in the expected order
+- all 55 diesel reference parameter pages appear in the expected order
 - paired parameter pages render both values correctly
 - battery SoC from UDS DID 0x19BD agrees with independent diagnostics
 - battery current decoded from C1 frame 0x41A has plausible sign and scale
