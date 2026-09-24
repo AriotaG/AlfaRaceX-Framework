@@ -119,7 +119,7 @@ typedef struct {
     uint32_t elm_deadline_ms;
     char elm_line[96];
     uint8_t elm_line_len;
-    uint8_t elm_usb_tx[800];
+    uint8_t elm_usb_tx[1024];
     uint16_t elm_usb_tx_len;
     uint16_t elm_usb_tx_off;
 #endif
@@ -129,6 +129,7 @@ typedef struct {
     bool diag_link_extended;
     uint32_t diag_filter_value;
     uint32_t diag_filter_mask;
+    uint16_t diag_timeout_ms;
     uint32_t diag_deadline_ms;
     uint8_t diag_link_sequence;
 
