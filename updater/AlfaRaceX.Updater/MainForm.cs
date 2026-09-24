@@ -98,7 +98,7 @@ internal sealed class MainForm : Form
             Padding = new Padding(18)
         };
         Controls.Add(body);
-        body.BringToFront();
+        sidebar.BringToFront();
 
         BuildHeader(body);
         BuildActions(body);
@@ -119,10 +119,19 @@ internal sealed class MainForm : Form
 
         _readyDot.Location = new Point(20, 22);
         status.Controls.Add(_readyDot);
-        status.Controls.Add(MakeLabel("Updater pronto", 50, 16, 300, 28, 13f, FontStyle.Bold, ArxTheme.Green));
-        status.Controls.Add(MakeLabel(
-            "Verifica la release disponibile e prepara i tre moduli AlfaRaceX.",
-            50, 46, 475, 38, 9.3f, FontStyle.Regular, ArxTheme.Muted));
+        _headline.SetBounds(50, 16, 450, 28);
+        _headline.Text = "Updater pronto";
+        _headline.Font = ArxTheme.Font(13f, FontStyle.Bold);
+        _headline.ForeColor = ArxTheme.Green;
+        _headline.BackColor = Color.Transparent;
+        status.Controls.Add(_headline);
+
+        _statusSub.SetBounds(50, 46, 475, 38);
+        _statusSub.Text = "Verifica la release disponibile e prepara i tre moduli AlfaRaceX.";
+        _statusSub.Font = ArxTheme.Font(9.3f);
+        _statusSub.ForeColor = ArxTheme.Muted;
+        _statusSub.BackColor = Color.Transparent;
+        status.Controls.Add(_statusSub);
 
         status.Controls.Add(MakeLabel("Versione updater", 22, 99, 170, 20, 8.5f, FontStyle.Regular, ArxTheme.Muted));
         _updaterValue.SetBounds(202, 97, 310, 22);
