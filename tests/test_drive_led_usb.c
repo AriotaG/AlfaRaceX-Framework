@@ -5,8 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 
-typedef struct {int attach;int detach;} UsbCalls;
-static bool ua(ArxUsbMode mode,void *u){(void)mode;((UsbCalls*)u)->attach++;return true;}
+typedef struct {int attach;int detach;ArxUsbMode last_usb_mode;} UsbCalls;
+static bool ua(ArxUsbMode mode,void *u){UsbCalls *c=(UsbCalls*)u;c->attach++;c->last_usb_mode=mode;return true;}
 static bool ud(void *u){((UsbCalls*)u)->detach++;return true;}
 
 int main(void) {
@@ -73,6 +73,21 @@ int main(void) {
     arx_usb_mode_note_configured(&um,1u);
     assert(!arx_usb_mode_process(&um,600000u,&ops));
     assert(um.state==ARX_USB_CONFIGURED && calls.detach==0);
+
+    /* RC5: switching from the deployed BH/C2 MSC class to CDC must detach
+       first and then attach the requested class on a later process cycle. */
+    arx_usb_mode_init(&um);
+    memset(&calls,0,sizeof(calls));
+    assert(arx_usb_mode_request(&um,ARX_USB_MODE_LEGACY_MSC,0u));
+    assert(arx_usb_mode_process(&um,0u,&ops));
+    assert(calls.attach==1 && calls.last_usb_mode==ARX_USB_MODE_LEGACY_MSC);
+    arx_usb_mode_note_configured(&um,1u);
+    assert(arx_usb_mode_request(&um,ARX_USB_MODE_SNIFFER,2u));
+    assert(um.state==ARX_USB_DETACH_REQUESTED);
+    assert(arx_usb_mode_process(&um,2u,&ops));
+    assert(calls.detach==1 && um.state==ARX_USB_ATTACH_REQUESTED);
+    assert(arx_usb_mode_process(&um,3u,&ops));
+    assert(calls.attach==2 && calls.last_usb_mode==ARX_USB_MODE_SNIFFER);
 
     puts("drive/led/usb tests: OK");
     return 0;
