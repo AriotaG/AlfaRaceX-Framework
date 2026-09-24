@@ -33,8 +33,15 @@ The replacement layout keeps the deployed memory map:
 - statistics page: `0x0801F000`
 - settings page: `0x0801F800`
 
-Do not erase the persistent pages unless a configuration reset is intentionally
-required. Prefer programming the application image over a full-chip erase.
+A physical BACCAble V3.2.4 backup used for RC5 validation also contains the
+BH/C2 legacy MSC image starting at `0x08010000`. That region is outside the
+60 KiB AlfaRaceX C2/BH application image. The AlfaRaceX updater erases only pages
+touched by the selected HEX image, so it does not require a full-chip erase and
+does not touch the persistent pages.
+
+Do not use mass erase. Do not erase the persistent pages unless a configuration
+reset is intentionally required. Prefer the AlfaRaceX updater or page-scoped
+programming of the matching HEX image.
 
 ## First boot
 
@@ -44,7 +51,8 @@ disabled. Confirm:
 - normal boot and current consumption
 - C1/C2/BH inter-controller communication
 - passive CAN receive on the correct bus
-- USB enumeration where applicable
+- C1 USB CDC enumeration when diagnostics/sniffer are enabled
+- BH/C2 default USB MSC enumeration and MSC<->CDC switching when sniffer is toggled
 - persistent configuration read
 - sleep and wake behavior
 
