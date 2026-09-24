@@ -1,11 +1,11 @@
 # AlfaRaceX 1.0.0-rc2
 
-This release candidate hardens BACCAble 4.7 telemetry parity for the reference
+This release candidate hardens reference telemetry parity for the reference
 Alfa Romeo Stelvio MY20 2.2 JTDm diesel Q4 target.
 
 ## RC2 corrections
 
-- restores the exact 55-page diesel dashboard order used by BACCAble 4.7
+- restores the exact 55-page diesel dashboard order used by the reference firmware
 - restores paired dashboard pages rather than treating every signal as a separate page
 - adds battery State of Charge through UDS DID `0x19BD`
 - adds battery current decoding from native C1 frame `0x41A`
