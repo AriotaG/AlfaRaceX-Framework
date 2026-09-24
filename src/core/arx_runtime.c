@@ -369,10 +369,6 @@ static void elm_process_line(ArxRuntime *rt,uint32_t now_ms) {
 #endif
 
 #if ARX_COMPILE_C2 || ARX_COMPILE_BH
-static uint8_t diag_link_destination(ArxRuntimeRole role) {
-    return role==ARX_RUNTIME_C2?ARX_LINK_TO_C2:ARX_LINK_TO_BH;
-}
-
 static void diag_slave_handle_link(
     ArxRuntime *rt,const ArxLinkFrame *link,uint32_t now_ms
 ) {
