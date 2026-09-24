@@ -28,7 +28,7 @@ ZF 8-speed automatic transmission.
 
 ## AlfaRaceX Updater
 
-![AlfaRaceX Updater dashboard](docs/images/alfaracex-updater-dashboard.svg)
+![AlfaRaceX Updater dashboard](docs/images/alfaracex-updater-dashboard.jpg)
 
 The Windows updater uses live manifest data for version, checksums, module state,
 progress and logs. The artwork is presentation-only; operational values remain
