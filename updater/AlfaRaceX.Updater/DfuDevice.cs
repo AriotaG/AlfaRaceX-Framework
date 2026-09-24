@@ -116,6 +116,99 @@ internal sealed class DfuDevice : IDisposable
         _ = Control(setup, Array.Empty<byte>());
     }
 
+    public byte[] ReadMemory(
+        uint address,
+        int length,
+        IProgress<int>? progress,
+        CancellationToken ct)
+    {
+        if (length <= 0)
+            throw new ArgumentOutOfRangeException(nameof(length));
+
+        EnsureIdle();
+        SetAddressPointer(address);
+        EnsureIdle();
+
+        byte[] result = new byte[length];
+        int offset = 0;
+        ushort block = 2;
+
+        while (offset < length)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            int count = Math.Min(TransferSize, length - offset);
+            byte[] chunk = new byte[count];
+            uint transferred = Control(
+                Setup(0xA1, RequestUpload, block, (ushort)count),
+                chunk);
+
+            if (transferred != count)
+                throw new IOException(
+                    $"Lettura incompleta a 0x{address + (uint)offset:X8}.");
+
+            Buffer.BlockCopy(chunk, 0, result, offset, count);
+            offset += count;
+            block++;
+
+            progress?.Report(
+                (int)Math.Clamp((long)offset * 100L / length, 0, 100));
+        }
+
+        EnsureIdle();
+        progress?.Report(100);
+        return result;
+    }
+
+    public void ProgramRawAndVerify(
+        uint address,
+        byte[] data,
+        uint pageSize,
+        IProgress<int>? progress,
+        Action<string>? log,
+        CancellationToken ct)
+    {
+        if (data is null || data.Length == 0)
+            throw new ArgumentException("Immagine raw vuota.", nameof(data));
+        if (pageSize == 0 || address % pageSize != 0)
+            throw new ArgumentException("Indirizzo o dimensione pagina non validi.");
+        if ((uint)data.Length % pageSize != 0)
+            throw new ArgumentException(
+                "La dimensione dell'immagine raw deve essere multipla della pagina Flash.");
+
+        int pages = data.Length / checked((int)pageSize);
+        long totalUnits = (long)data.Length * 3L;
+        long completed = 0;
+
+        log?.Invoke(
+            $"Ripristino raw: 0x{address:X8}, {data.Length} byte, {pages} pagine.");
+
+        for (int i = 0; i < pages; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            ErasePage(address + (uint)i * pageSize);
+            completed += pageSize;
+            progress?.Report(
+                (int)Math.Clamp(completed * 100L / totalUnits, 0, 100));
+        }
+
+        WriteSegment(address, data, bytes =>
+        {
+            completed += bytes;
+            progress?.Report(
+                (int)Math.Clamp(completed * 100L / totalUnits, 0, 100));
+        });
+
+        VerifySegment(address, data, bytes =>
+        {
+            completed += bytes;
+            progress?.Report(
+                (int)Math.Clamp(completed * 100L / totalUnits, 0, 100));
+        });
+
+        progress?.Report(100);
+    }
+
     private void ErasePage(uint address)
     {
         EnsureIdle();
