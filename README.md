@@ -118,12 +118,17 @@ docs/                   architecture and engineering notes
 
 Apache License 2.0. See `LICENSE`.
 
-## Disclaimer
+## Disclaimer / Avvertenze di sicurezza
 
-AlfaRaceX is an independent research and development project.
+**IT:** AlfaRaceX è un progetto indipendente, gratuito e open source destinato a studio, ricerca e sperimentazione. Non è un prodotto automotive certificato o omologato. Le funzioni che alterano, limitano o disattivano ADAS, sistemi di sicurezza, assistenza alla guida o caratteristiche rilevanti per l'omologazione devono essere utilizzate esclusivamente su veicolo fermo o in aree private chiuse alla circolazione e non durante la normale circolazione stradale. L'utente è responsabile delle configurazioni applicate, del rispetto della legge e del ripristino di una configurazione conforme prima dell'uso su strada.
 
-Alfa Romeo, Giulia and Stelvio are trademarks of their respective owners.
-AlfaRaceX is not affiliated with or endorsed by Alfa Romeo or Stellantis.
+**EN:** AlfaRaceX is an independent, free and open-source project intended for study, research and experimentation. It is not a certified or road-approved automotive product. Features that alter, limit or disable ADAS, safety systems, driver assistance or homologation-relevant characteristics must be used only while the vehicle is stationary or in private areas closed to public traffic, and not during normal public-road operation. The user is responsible for the configurations applied, legal compliance and restoration of a compliant configuration before road use.
+
+The software is provided **AS IS**. Interaction with ECUs, CAN networks, vehicle configuration and Flash memory carries inherent risk. To the maximum extent permitted by applicable law, authors and contributors are not liable for damage arising from installation or use of the software; liability that cannot legally be excluded remains unaffected.
+
+Alfa Romeo, Giulia and Stelvio are trademarks of their respective owners. AlfaRaceX is not affiliated with or endorsed by Alfa Romeo or Stellantis.
+
+Read the complete bilingual terms in [`DISCLAIMER.md`](DISCLAIMER.md). AlfaRaceX Desktop also presents the safety notice on first run and stores the accepted disclaimer version locally.
 
 
 ## Feature coverage
