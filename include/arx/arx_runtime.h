@@ -4,6 +4,7 @@
 #include "arx/arx_can.h"
 #include "arx/arx_config.h"
 #include "arx/arx_interchip.h"
+#include "arx/arx_link.h"
 #include "arx/arx_power.h"
 #include "arx/arx_storage.h"
 #include "arx/arx_usb_mode.h"
@@ -17,6 +18,8 @@
 #include "arx/features/arx_drive_style.h"
 #include "arx/features/arx_dynamic_shift.h"
 #include "arx/features/arx_dyno.h"
+#include "arx/features/arx_elm327.h"
+#include "arx/features/arx_elm_transport.h"
 #include "arx/features/arx_faults.h"
 #include "arx/features/arx_immobilizer.h"
 #include "arx/features/arx_led_strip.h"
@@ -100,6 +103,36 @@ typedef struct {
     ArxPerformanceStats performance;
     ArxMaxHold max_hold;
 
+#if !defined(ARX_BUILD_C2) && !defined(ARX_BUILD_BH)
+    /* C1 owns the host-facing ELM session. Host builds keep these fields so
+       integration tests can exercise the complete three-controller topology. */
+    ArxElm327 elm;
+    ArxElmRouter elm_router;
+    ArxElmTransaction elm_transaction;
+    ArxElmRequest elm_request;
+    ArxElmBus elm_candidates[3];
+    uint8_t elm_candidate_count;
+    uint8_t elm_candidate_index;
+    uint8_t elm_link_sequence;
+    bool elm_request_active;
+    bool elm_saw_response;
+    uint32_t elm_deadline_ms;
+    char elm_line[96];
+    uint8_t elm_line_len;
+    uint8_t elm_usb_tx[1024];
+    uint16_t elm_usb_tx_len;
+    uint16_t elm_usb_tx_off;
+#endif
+
+    /* Slave-side diagnostic relay state used by C2/BH. */
+    bool diag_link_armed;
+    bool diag_link_extended;
+    uint32_t diag_filter_value;
+    uint32_t diag_filter_mask;
+    uint16_t diag_timeout_ms;
+    uint32_t diag_deadline_ms;
+    uint8_t diag_link_sequence;
+
     bool template_4b1_valid;
     ArxCanFrame template_4b1;
 
@@ -168,6 +201,13 @@ void arx_runtime_usb_configured(
 
 void arx_runtime_usb_command(
     ArxRuntime *rt,
+    uint32_t now_ms
+);
+
+void arx_runtime_usb_rx(
+    ArxRuntime *rt,
+    const uint8_t *data,
+    size_t length,
     uint32_t now_ms
 );
 

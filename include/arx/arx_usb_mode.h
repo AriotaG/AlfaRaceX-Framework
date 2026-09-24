@@ -6,6 +6,7 @@
 
 typedef enum {
     ARX_USB_MODE_NONE = 0,
+    ARX_USB_MODE_LEGACY_MSC,
     ARX_USB_MODE_SNIFFER,
     ARX_USB_MODE_DIAGNOSTIC
 } ArxUsbMode;
@@ -20,6 +21,7 @@ typedef enum {
 
 typedef struct {
     ArxUsbMode mode;
+    ArxUsbMode queued_mode;
     ArxUsbState state;
     uint32_t activation_ms;
     uint32_t last_host_seen_ms;

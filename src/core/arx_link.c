@@ -44,7 +44,8 @@ void arx_link_build_config(
     ArxLinkFrame *f,uint8_t dest,uint32_t value,uint32_t mask,
     uint16_t timeout_ms,bool auto_fc,uint8_t seq
 ) {
-    base(f,dest,ARX_LINK_CFG,0u,value,NULL,0u,seq);
+    const bool extended=(value>0x7FFu)||(mask>0x7FFu);
+    base(f,dest,ARX_LINK_CFG,extended?ARX_LINK_FLAG_EXTID:0u,value,NULL,0u,seq);
     f->raw[8]=(uint8_t)(mask>>24u); f->raw[9]=(uint8_t)(mask>>16u);
     f->raw[10]=(uint8_t)(mask>>8u); f->raw[11]=(uint8_t)mask;
     f->raw[12]=(uint8_t)(timeout_ms>>8u); f->raw[13]=(uint8_t)timeout_ms;

@@ -38,14 +38,14 @@ logic are represented in ARX and covered by deterministic tests.
 | Generic CAN router | PARITY | generic reusable rule engine |
 | Runtime config | IMPROVED / TARGET | version + CRC, dual-slot model and STM32F072 storage backend are present; physical persistence validation remains |
 | TX queue | IMPROVED | prioritized queues; dequeue only after success/expiry/retry exhaustion |
-| CAN sniffer | PARITY / TARGET | 16-byte binary records, 256-byte ring, overflow marker, 64-byte chunking and 20 ms partial flush represented; USB target is linked, physical enumeration/lifecycle validation remains |
-| ELM-compatible interface | PARITY / TARGET | strict CAN-oriented AT compatibility, USER protocol divisors, filters, Flow Control, ISO-TP SF/FF/CF, route cache and multi-bus transaction core implemented; USB CDC target is linked, hardware validation remains |
+| CAN sniffer | PARITY / TARGET | 16-byte binary records, 256-byte ring, overflow marker, 64-byte chunking and 20 ms partial flush represented; CDC target and BH/C2 MSC<->CDC class switching are runtime-wired; physical enumeration/lifecycle validation remains |
+| ELM-compatible interface | PARITY / TARGET | strict CAN-oriented AT compatibility, USER protocol divisors, filters, Flow Control, ISO-TP SF/FF/CF, route cache, CDC RX/TX and C1->C2/BH diagnostic relay are runtime-wired and end-to-end host-tested; hardware validation remains |
 | Dashboard menu | PARITY / TARGET | 16-page main menu, 31-page setup menu, exact 55-page diesel parameter order, paired-value formatting, skip rules, setup cycles, USB mutual exclusion and 18-character rendering are represented; vehicle replay validation remains |
-| Telemetry/UDS parameters | PARITY / TARGET | BACCAble 4.7 diesel page-pair contract, 500 ms active-page UDS scheduler, exact scaling decoder, battery SoC DID 0x19BD and native 0x41A battery current implemented; physical CAN/IPC replay remains |
+| Telemetry/UDS parameters | PARITY / TARGET | deployed/reference diesel page-pair contract, 500 ms active-page UDS scheduler, exact scaling decoder, battery SoC DID 0x19BD and native 0x41A battery current implemented. RC5 physical backup reports BACCAble V3.2.4; physical CAN/IPC replay remains |
 | LED strip | PARITY / TARGET | 46-LED patterns, raw pedal scaling, 0.9/0.1 filter, tangent brightness curve and 1,154-word BRG WS2812 encoding implemented; TIM1/DMA target is linked, signal validation remains |
 | Flash/settings | PARITY / TARGET | deployed 32-slot settings, four-byte stride, visibility packing, statistics and BH mirror layouts supported through a testable backend; STM32 HAL backend added |
 | Low-consume/wakeup | PARITY / TARGET | 3500/3400 ms timing, sleep blockers, UART pause/resume and PA4/PA5 action contract represented |
-| Inter-controller link | PARITY / TARGET | deployed 19-byte 0x20-padded control frames, queue size 10 and 250/200 ms master/slave timing represented; diagnostic bridge remains separate |
+| Inter-controller link | PARITY / TARGET | deployed 19-byte 0x20-padded control frames, queue size 10 and 250/200 ms normal timing represented; checksummed 0x0E/0x0F/0x10 diagnostic frames are integrated with priority over normal queued traffic |
 | Statistics / max-hold | PARITY / TARGET | 0-100/100-200 timing, 10 ms start compensation, 20/40 s timeout, best-time dirty state and two-value max hold implemented and runtime-wired |
 | Save log to filesystem | IMPROVED / TARGET | portable CSV frame exporter implemented; FAT/MSC target sink remains to bind on the existing board |
 | Remote start | REFERENCE EXPERIMENTAL | intentionally not promoted; reference implementation is commented/incomplete |
