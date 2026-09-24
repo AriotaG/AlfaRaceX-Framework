@@ -21,7 +21,7 @@ on:
       - ".github/workflows/build-desktop.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-test-package:
@@ -100,3 +100,17 @@ jobs:
             artifacts/AlfaRaceX-Setup.sha256
             Releases/*.nupkg
             Releases/RELEASES
+
+      - name: Publish AlfaRaceX Desktop release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [xml]$project = Get-Content desktop/AlfaRaceX.Desktop/AlfaRaceX.Desktop.csproj
+          $version = [string]$project.Project.PropertyGroup.Version
+          $tag = "desktop-v$version"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title "AlfaRaceX Desktop $version" --notes "Prima distribuzione Windows installabile di AlfaRaceX Desktop. Build WPF/WebView2 con dati persistenti separati, SQLite e packaging Velopack."
+          }
+          gh release upload $tag artifacts/AlfaRaceX-Setup.exe artifacts/AlfaRaceX-Setup.sha256 Releases/*-full.nupkg Releases/RELEASES --clobber
