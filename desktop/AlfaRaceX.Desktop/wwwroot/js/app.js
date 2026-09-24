@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const state = { page: 'dashboard', backupRole: 'BH', busy: false, appInfo: {}, backups: [] };
+  const state = { page: 'dashboard', backupRole: 'BH', busy: false, appInfo: {}, backups: [], disclaimerAccepted: false };
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const host = (action, payload = {}) => window.chrome.webview.postMessage({ action, payload });
@@ -92,10 +92,17 @@
     switch (msg.type) {
       case 'appInfo':
         state.appInfo = d;
+        state.disclaimerAccepted = !!d.disclaimerAccepted;
         $('infoVersion').textContent = `v${d.appVersion}`;
         $('infoData').textContent = d.dataRoot;
         $('infoBackup').textContent = d.backupRoot;
         $('infoDb').textContent = d.database;
+        $('disclaimerGate').hidden = state.disclaimerAccepted;
+        break;
+      case 'disclaimerAccepted':
+        state.disclaimerAccepted = true;
+        $('disclaimerGate').hidden = true;
+        toast('Disclaimer registrato. / Disclaimer accepted.', 'AlfaRaceX');
         break;
       case 'dashboard': renderDashboard(d); break;
       case 'manifest': renderManifest(d); break;
@@ -140,6 +147,9 @@
   $('cancelBtn').addEventListener('click', () => host('cancelOperation'));
   $('clearLogsBtn').addEventListener('click', () => { if (confirm('Pulire la cronologia dei log?')) host('clearLogs'); });
   $('repoBtn').addEventListener('click', () => host('openExternal', { url: 'https://github.com/AriotaG/AlfaRaceX-Framework' }));
+  $('disclaimerRepoBtn').addEventListener('click', () => host('openExternal', { url: 'https://github.com/AriotaG/AlfaRaceX-Framework/blob/main/DISCLAIMER.md' }));
+  $('disclaimerAcceptBtn').addEventListener('click', () => host('acceptDisclaimer'));
+  $('disclaimerExitBtn').addEventListener('click', () => host('exitApplication'));
 
   host('initialize');
 })();
