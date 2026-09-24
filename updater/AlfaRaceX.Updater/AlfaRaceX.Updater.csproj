@@ -14,10 +14,12 @@
     <PublishTrimmed>false</PublishTrimmed>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <DebugType>embedded</DebugType>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <ApplicationIcon>Assets\ARX.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Assets\AlfaRaceX-Splash.jpg" LogicalName="AlfaRaceX.Splash.jpg" />
+    <EmbeddedResource Include="Assets\ARX-256.png" LogicalName="AlfaRaceX.ARX.png" />
+    <EmbeddedResource Include="Assets\ARX-Hero.jpg" LogicalName="AlfaRaceX.Hero.jpg" />
   </ItemGroup>
 </Project>
