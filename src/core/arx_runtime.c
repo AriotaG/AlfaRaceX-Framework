@@ -1055,6 +1055,18 @@ void arx_runtime_on_can(
     handle_common_state_updates(rt,frame,now_ms);
 
 #if ARX_COMPILE_C1
+    if(rt->role==ARX_RUNTIME_C1&&rt->elm_request_active&&
+       rt->elm_candidate_index<rt->elm_candidate_count&&
+       rt->elm_candidates[rt->elm_candidate_index]==ARX_ELM_BUS_C1)
+        elm_handle_response(rt,frame,now_ms);
+#endif
+
+#if ARX_COMPILE_C2 || ARX_COMPILE_BH
+    if(rt->role==ARX_RUNTIME_C2||rt->role==ARX_RUNTIME_BH)
+        diag_slave_on_can(rt,frame,now_ms);
+#endif
+
+#if ARX_COMPILE_C1
     if(rt->role==ARX_RUNTIME_C1&&!frame->extended_id&&frame->id==0x101u&&
        (rt->vehicle.valid_mask&ARX_VS_SPEED)){
         arx_performance_update(&rt->performance,rt->vehicle.vehicle_speed_kmh,now_ms);
@@ -1330,7 +1342,7 @@ static void interchip_c2(ArxRuntime *rt,uint8_t cmd,uint32_t now_ms) {
         case ARX_IC_SHARED_SNIFFER_OFF:
             arx_sniffer_stop(&rt->sniffer);
             rt->sniffer.enabled=false;
-            (void)arx_usb_mode_request(&rt->usb_mode,ARX_USB_MODE_NONE,now_ms);
+            (void)arx_usb_mode_request(&rt->usb_mode,ARX_USB_MODE_LEGACY_MSC,now_ms);
             break;
         case ARX_IC_SHARED_SNIFFER_ON:
             rt->sniffer.enabled=true;
@@ -1386,7 +1398,7 @@ static void interchip_bh(
             case ARX_IC_SHARED_SNIFFER_OFF:
                 arx_sniffer_stop(&rt->sniffer);
                 rt->sniffer.enabled=false;
-                (void)arx_usb_mode_request(&rt->usb_mode,ARX_USB_MODE_NONE,now_ms);
+                (void)arx_usb_mode_request(&rt->usb_mode,ARX_USB_MODE_LEGACY_MSC,now_ms);
                 return;
             case ARX_IC_SHARED_SNIFFER_ON:
                 rt->sniffer.enabled=true;
@@ -1432,6 +1444,47 @@ void arx_runtime_on_interchip(
 ) {
     if(!rt||!raw)return;
     const uint8_t dest=raw[0];
+
+    if(dest>=ARX_LINK_TO_C2&&dest<=ARX_LINK_TO_MASTER){
+        ArxLinkFrame link;
+        memcpy(link.raw,raw,ARX_LINK_FRAME_SIZE);
+        if(!arx_link_validate(&link))return;
+
+#if ARX_COMPILE_C1
+        if(rt->role==ARX_RUNTIME_C1&&dest==ARX_LINK_TO_MASTER){
+            if(!rt->elm_request_active||
+               rt->elm_candidate_index>=rt->elm_candidate_count)return;
+            const ArxElmBus candidate=rt->elm_candidates[rt->elm_candidate_index];
+            if(candidate==ARX_ELM_BUS_C1)return;
+
+            if(link.raw[1]==ARX_LINK_RSP){
+                ArxCanFrame frame={0};
+                frame.bus=elm_bus(candidate);
+                frame.id=arx_link_can_id(&link);
+                frame.extended_id=(link.raw[2]&ARX_LINK_FLAG_EXTID)!=0u;
+                frame.dlc=arx_link_dlc(&link);
+                frame.timestamp_ms=now_ms;
+                memcpy(frame.data,arx_link_data(&link),frame.dlc);
+                elm_handle_response(rt,&frame,now_ms);
+            }else if(link.raw[1]==ARX_LINK_END&&
+                     (link.raw[2]&ARX_LINK_FLAG_NODATA)!=0u){
+                (void)elm_try_next_candidate(rt,now_ms);
+            }
+            return;
+        }
+#endif
+
+#if ARX_COMPILE_C2 || ARX_COMPILE_BH
+        if((rt->role==ARX_RUNTIME_C2&&dest==ARX_LINK_TO_C2)||
+           (rt->role==ARX_RUNTIME_BH&&dest==ARX_LINK_TO_BH)){
+            arx_interchip_note_master_request(&rt->interchip,now_ms);
+            diag_slave_handle_link(rt,&link,now_ms);
+            return;
+        }
+#endif
+        return;
+    }
+
     if(!dest_matches(rt->role,dest))return;
 
     arx_interchip_note_master_request(&rt->interchip,now_ms);
