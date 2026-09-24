@@ -128,9 +128,58 @@
         <section class="panel info-card"><img src="img/arx.svg" alt="ARX"><div><h3>AlfaRaceX Desktop <span id="infoVersion">—</span></h3><p>.NET 8 / WPF / WebView2 / SQLite / Velopack</p><button class="btn-arx ghost" id="repoBtn">Repository GitHub</button></div></section>
         <section class="panel"><h3>Percorsi locali</h3><dl class="info-list"><dt>Dati</dt><dd id="infoData">—</dd><dt>Backup</dt><dd id="infoBackup">—</dd><dt>Database</dt><dd id="infoDb">—</dd></dl></section>
       </div>
-      <section class="panel mt-4"><h3>Nota importante</h3><p class="muted">AlfaRaceX è un progetto indipendente di ricerca e sviluppo. Alfa Romeo, Giulia e Stelvio sono marchi dei rispettivi proprietari. Il progetto non è affiliato né approvato da Alfa Romeo o Stellantis.</p></section>
+      <section class="panel mt-4"><h3>Nota importante / Important notice</h3><p class="muted">AlfaRaceX è un progetto indipendente di ricerca, studio e sperimentazione. Non è un prodotto automotive certificato o omologato e non è affiliato né approvato da Alfa Romeo o Stellantis. / AlfaRaceX is an independent research, study and experimental project. It is not a certified or road-approved automotive product and is not affiliated with or endorsed by Alfa Romeo or Stellantis.</p></section>
+
+      <section class="panel disclaimer-panel mt-4">
+        <div class="panel-head"><div><span class="section-tag">SICUREZZA / SAFETY</span><h3>Disclaimer e condizioni d'uso / Disclaimer and conditions of use</h3></div><button class="btn-arx ghost" id="disclaimerRepoBtn">DISCLAIMER.md</button></div>
+        <div class="disclaimer-columns">
+          <div>
+            <h4>Italiano</h4>
+            <p>AlfaRaceX è software sperimentale open source fornito <strong>“COSÌ COM'È”</strong>, senza garanzie di funzionamento, compatibilità o idoneità a uno specifico utilizzo. Operazioni su CAN, centraline, configurazioni e memoria Flash possono causare perdita di dati, mancato avviamento, errori delle centraline o necessità di ripristino mediante strumenti esterni.</p>
+            <p>Le funzioni che modificano, limitano o disattivano ADAS, assistenza alla guida, sistemi di sicurezza o caratteristiche rilevanti per l'omologazione sono destinate esclusivamente a studio, sviluppo, diagnostica ed esperimenti su veicolo fermo o in <strong>aree private chiuse alla circolazione</strong>.</p>
+            <p><strong>È vietato utilizzare su strade pubbliche o aree soggette alla normale circolazione, in qualunque Paese, un veicolo con configurazioni AlfaRaceX che alterino o riducano sistemi di sicurezza, assistenza alla guida o requisiti di conformità.</strong></p>
+            <p>Prima dell'uso su strada è responsabilità dell'utente ripristinare una configurazione conforme alla normativa applicabile. Le modifiche possono incidere su omologazione, garanzia e copertura assicurativa. Nei limiti massimi consentiti dalla legge, autori e contributori non rispondono dei danni derivanti dall'installazione o dall'utilizzo del software. Restano escluse da tale limitazione le responsabilità che non possono essere legalmente escluse.</p>
+          </div>
+          <div>
+            <h4>English</h4>
+            <p>AlfaRaceX is experimental open-source software provided <strong>“AS IS”</strong>, without warranties regarding operation, compatibility or fitness for a particular purpose. Operations involving CAN networks, ECUs, vehicle configuration or Flash memory may result in data loss, a vehicle that does not start, ECU faults or the need for recovery using external diagnostic equipment.</p>
+            <p>Features that modify, limit or disable ADAS, driver-assistance systems, safety systems or homologation-relevant characteristics are intended exclusively for study, development, diagnostics and experimentation while the vehicle is stationary or in <strong>private areas closed to public traffic</strong>.</p>
+            <p><strong>A vehicle running an AlfaRaceX configuration that alters or reduces safety systems, driver-assistance systems or compliance requirements must not be used on public roads or areas subject to normal road traffic laws in any country.</strong></p>
+            <p>Before normal road use, the user is responsible for restoring a configuration compliant with applicable law. Modifications may affect homologation, warranty and insurance coverage. To the maximum extent permitted by law, authors and contributors are not liable for damage arising from installation or use of the software. Liability that cannot legally be excluded remains unaffected.</p>
+          </div>
+        </div>
+      </section>
     </section>
   </main>
+</div>
+
+<div id="disclaimerGate" class="disclaimer-gate" hidden>
+  <div class="disclaimer-dialog" role="dialog" aria-modal="true" aria-labelledby="disclaimerTitle">
+    <div class="disclaimer-dialog-head">
+      <div><span class="section-tag">FIRST RUN / PRIMO AVVIO</span><h2 id="disclaimerTitle">Avvertenze di sicurezza / Safety notice</h2></div>
+      <img src="img/arx.svg" alt="ARX">
+    </div>
+    <div class="disclaimer-scroll">
+      <section>
+        <h3>Italiano</h3>
+        <p>AlfaRaceX è un progetto indipendente, gratuito e open source destinato a studio, ricerca, sperimentazione e condivisione della conoscenza. Non è un prodotto automotive certificato, omologato o approvato per l'uso su strada.</p>
+        <p>Il software è fornito <strong>“COSÌ COM'È”</strong>. Intervenire su centraline, reti CAN, configurazioni o memoria Flash comporta rischi e può causare malfunzionamenti, perdita di dati, mancato avviamento o necessità di ripristino esterno. Effettua sempre un backup verificato quando tecnicamente possibile.</p>
+        <p>Le funzioni che alterano o disattivano ADAS, sistemi di sicurezza, assistenza alla guida o requisiti di omologazione sono esclusivamente per veicolo fermo o aree private chiuse al traffico e <strong>non devono essere utilizzate nella normale circolazione stradale</strong>.</p>
+        <p>Utilizzando AlfaRaceX accetti di essere responsabile delle configurazioni applicate e del rispetto delle normative, dell'omologazione, della garanzia e delle condizioni assicurative. Nei limiti consentiti dalla legge, autori e contributori non assumono responsabilità per danni derivanti dall'uso del software.</p>
+      </section>
+      <section>
+        <h3>English</h3>
+        <p>AlfaRaceX is an independent, free and open-source project intended for study, research, experimentation and knowledge sharing. It is not a certified, homologated or road-approved automotive product.</p>
+        <p>The software is provided <strong>“AS IS”</strong>. Interacting with ECUs, CAN networks, vehicle configuration or Flash memory carries risk and may cause malfunctions, data loss, a no-start condition or the need for external recovery. Always create a verified backup when technically possible.</p>
+        <p>Features that alter or disable ADAS, safety systems, driver assistance or homologation requirements are for stationary vehicles or private areas closed to traffic only and <strong>must not be used during normal public-road operation</strong>.</p>
+        <p>By using AlfaRaceX you accept responsibility for the configurations you apply and for compliance with applicable law, homologation, warranty and insurance requirements. To the extent permitted by law, authors and contributors accept no liability for damage arising from use of the software.</p>
+      </section>
+    </div>
+    <div class="disclaimer-actions">
+      <button class="btn-arx ghost" id="disclaimerExitBtn">Esci / Exit</button>
+      <button class="btn-arx" id="disclaimerAcceptBtn">Accetto / I Accept</button>
+    </div>
+  </div>
 </div>
 
 <div id="toast" class="toast-arx"><strong id="toastTitle">AlfaRaceX</strong><span id="toastText"></span></div>
