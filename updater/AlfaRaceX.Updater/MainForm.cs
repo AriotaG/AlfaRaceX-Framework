@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing;
 
 namespace AlfaRaceX.Updater;
@@ -70,7 +71,7 @@ internal sealed class MainForm : Form
         Controls.Add(subtitle);
 
         _version.SetBounds(32, 112, 650, 26);
-        _version.Text = "Release: non verificata";
+        _version.Text = $"Updater {AppConstants.UpdaterVersion}  |  Release firmware: non verificata";
         Controls.Add(_version);
 
         _status.SetBounds(32, 144, 650, 46);
@@ -125,9 +126,12 @@ internal sealed class MainForm : Form
 
         try
         {
-            Log("Controllo manifest AlfaRaceX...");
+            await CheckUpdaterVersionAsync(_cts.Token);
+
+            Log("Controllo manifest firmware AlfaRaceX...");
             _manifest = await _coordinator.LoadManifestAsync(_cts.Token);
-            _version.Text = $"Release disponibile: {_manifest.Version}  |  Canale: {_manifest.Channel}";
+            _version.Text =
+                $"Updater {AppConstants.UpdaterVersion}  |  Firmware: {_manifest.Version} ({_manifest.Channel})";
             Log($"Release {_manifest.Version} trovata.");
 
             _prepared = await _coordinator.PrepareAsync(
@@ -151,6 +155,59 @@ internal sealed class MainForm : Form
         {
             _check.Enabled = true;
         }
+    }
+
+    private async Task CheckUpdaterVersionAsync(CancellationToken ct)
+    {
+        try
+        {
+            UpdaterManifest available =
+                await _coordinator.LoadUpdaterManifestAsync(ct);
+
+            Log(
+                $"Updater locale {AppConstants.UpdaterVersion}; " +
+                $"ultima versione {available.Version}.");
+
+            if (!IsNewerVersion(
+                available.Version, AppConstants.UpdaterVersion))
+                return;
+
+            var answer = MessageBox.Show(
+                this,
+                $"È disponibile AlfaRaceX Updater {available.Version}.\n\n" +
+                $"Questa versione è {AppConstants.UpdaterVersion}. " +
+                "Il firmware può comunque essere aggiornato con l'Updater attuale.\n\n" +
+                "Vuoi aprire la pagina della nuova versione?",
+                "Aggiornamento Updater disponibile",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Information);
+
+            if (answer == DialogResult.Yes)
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = available.ReleaseUrl,
+                    UseShellExecute = true
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log(
+                "Controllo versione Updater non disponibile: " +
+                ex.Message);
+        }
+    }
+
+    private static bool IsNewerVersion(string available, string current)
+    {
+        return Version.TryParse(available.Trim(), out Version? remote) &&
+               Version.TryParse(current.Trim(), out Version? local) &&
+               remote > local;
     }
 
     private async Task UpdateAsync()
