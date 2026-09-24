@@ -74,6 +74,7 @@ set(USB_DEVICE_SRC
   ${USB_DEVICE_DIR}/Class/MSC/Src/usbd_msc.c
   ${USB_DEVICE_DIR}/Class/MSC/Src/usbd_msc_bot.c
   ${USB_DEVICE_DIR}/Class/MSC/Src/usbd_msc_scsi.c
+  ${USB_DEVICE_DIR}/Class/MSC/Src/usbd_msc_data.c
 )
 
 add_executable(arx_${ARX_ROLE}.elf
