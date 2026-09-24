@@ -66,7 +66,7 @@ shift urgency levels used by the instrument cluster message family.
 Current release behavior:
 
 - disabled in Natural
-- BACCAble-parity shift behavior retained for Race
+- reference-parity shift behavior retained for Race
 - configurable RPM thresholds
 - no forced change of the vehicle's real DNA state
 - Dynamic-mode shift is an AlfaRaceX extension and remains experimental until the
