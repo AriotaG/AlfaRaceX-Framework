@@ -26,13 +26,22 @@ ARX VehicleState
 The first reference target is an Alfa Romeo Stelvio MY20 2.2 JTDm 210 HP Q4 with
 ZF 8-speed automatic transmission.
 
-## AlfaRaceX Updater
+## AlfaRaceX Desktop
 
-![AlfaRaceX Updater dashboard](docs/images/alfaracex-updater-dashboard.jpg)
+![AlfaRaceX Desktop visual reference](docs/images/alfaracex-updater-dashboard.jpg)
 
-The Windows updater uses live manifest data for version, checksums, module state,
-progress and logs. The artwork is presentation-only; operational values remain
-dynamic UI elements.
+The official Windows host application is now **AlfaRaceX Desktop**, located under
+`desktop/AlfaRaceX.Desktop`. It uses a .NET 8/WPF shell with a fully local WebView2
+interface, persistent SQLite history, catalogued backups, DFU firmware update and
+restore services, and Velopack installation.
+
+Runtime data is stored outside the application directory under
+`%LOCALAPPDATA%\AlfaRaceX\Desktop`, so backups, logs and history survive application
+updates. The former standalone WinForms updater is retained as legacy/reference code
+and as the source of the proven DFU core; it is no longer the official distribution.
+
+The visual reference remains presentation-only: firmware versions, checksums, module
+state, progress, backup history and logs are populated dynamically by the application.
 
 ## Current baseline
 
