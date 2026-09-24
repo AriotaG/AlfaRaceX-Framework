@@ -1,11 +1,11 @@
 # AlfaRaceX 1.0.0-rc5
 
 RC5 is a hardware-parity and diagnostic-integration candidate based on direct
-comparison with a backed-up physical three-controller STM32F072 BACCAble unit.
+comparison with a backed-up physical three-controller STM32F072 reference unit.
 
 ## Physical reference findings
 
-The audited installed firmware identifies itself as BACCAble V3.2.4.
+The audited installed firmware identifies the audited reference firmware version.
 
 The backup confirms:
 
