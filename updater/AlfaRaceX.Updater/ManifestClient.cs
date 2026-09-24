@@ -12,7 +12,7 @@ internal sealed class ManifestClient
 
     public ManifestClient()
     {
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("AlfaRaceX-Updater/0.1.0");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("AlfaRaceX-Updater/0.2.0");
     }
 
     public async Task<UpdateManifest> GetManifestAsync(string url, CancellationToken ct)
