@@ -540,7 +540,7 @@ static void runtime_bind_preferences(ArxRuntime *rt,uint32_t now_ms,bool apply_u
         }else
 #endif
         {
-            /* The physical BACCAble V3.2.4 backup proves that BH/C2 expose
+            /* The physical reference-firmware backup proves that BH/C2 expose
                USB MSC when they are not temporarily used as CAN sniffers. */
             (void)arx_usb_mode_request(
                 &rt->usb_mode,
@@ -648,7 +648,7 @@ static bool telemetry_value(ArxRuntime *rt,const char *key,float *value) {
             *value=rt->telemetry_values[index];
             return true;
         }
-        /* BACCAble uses UDS 0x19BD as the diesel SoC source, but retain the
+        /* The reference firmware uses UDS 0x19BD as the diesel SoC source, but retain the
            native 0x41A value as a startup fallback until the first UDS reply. */
         if(!strcmp(key,"battery_soc")&&(rt->vehicle.valid_mask&ARX_VS_BATTERY_SOC)){
             *value=rt->vehicle.battery_soc_percent;
