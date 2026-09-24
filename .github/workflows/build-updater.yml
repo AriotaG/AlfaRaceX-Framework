@@ -49,8 +49,36 @@ jobs:
             out/AlfaRaceX-Updater.exe
             out/AlfaRaceX-Updater.sha256
 
+  windows-smoke:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: AlfaRaceX-Updater-win-x64
+          path: out
+
+      - name: Run Windows startup smoke test
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath ".\out\AlfaRaceX-Updater.exe" -ArgumentList "--smoke-test" -PassThru -Wait
+          if ($p.ExitCode -ne 0) {
+            throw "Windows smoke test failed with exit code $($p.ExitCode)"
+          }
+
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: windows-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: AlfaRaceX-Updater-win-x64
+          path: out
+
       - name: Publish standalone updater release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
