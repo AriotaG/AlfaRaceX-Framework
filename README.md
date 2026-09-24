@@ -34,7 +34,7 @@ three-controller STM32F072 hardware and currently includes:
 - C1 / C2 / BH runtime orchestration
 - prioritized CAN transport with retry/deadline handling
 - UDS and ISO-TP transport
-- structured vehicle state and BACCAble-compatible 55-page diesel telemetry database
+- structured vehicle state and reference-compatible 55-page diesel telemetry database
 - function-specific state machines and restoration logic
 - 19-byte inter-controller protocol
 - pedal-controller UART protocol
@@ -47,7 +47,7 @@ three-controller STM32F072 hardware and currently includes:
 - Debug/Release host regression gates and Cortex-M0 object compilation
 - firmware size-gate tooling for the existing board memory map
 
-The project is **software-complete for the reference MY20 diesel hardware target**, with C1/C2/BH ARM images linked and memory-gated. The 1.0.0-rc5 validation scope is the reference Stelvio MY20 diesel profile and incorporates the USB/flash findings from a physical BACCAble V3.2.4 backup. Promotion to **1.0.0 Stable** still requires the physical validation checklist on the existing board and vehicle.
+The project is **software-complete for the reference MY20 diesel hardware target**, with C1/C2/BH ARM images linked and memory-gated. The 1.0.0-rc5 validation scope is the reference Stelvio MY20 diesel profile and incorporates the USB/flash findings from a physical reference-firmware backup. Promotion to **1.0.0 Stable** still requires the physical validation checklist on the existing board and vehicle.
 
 ## Project principles
 
