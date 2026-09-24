@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>AlfaRaceX</AssemblyName>
+    <RootNamespace>AlfaRaceX.Desktop</RootNamespace>
+    <StartupObject>AlfaRaceX.Desktop.App</StartupObject>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>false</PublishSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <DebugType>embedded</DebugType>
+    <Version>0.1.0</Version>
+    <FileVersion>0.1.0.0</FileVersion>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Include="App.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.31" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+    <PackageReference Include="Velopack" Version="1.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\updater\branding\ARX.svg" Link="wwwroot\img\arx.svg" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\updater\branding\Hero.svg" Link="wwwroot\img\hero.svg" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\updater\branding\Splash.svg" Link="wwwroot\img\splash.svg" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\updater\AlfaRaceX.Updater\AppConstants.cs" Link="Core\AppConstants.cs" />
+    <Compile Include="..\..\updater\AlfaRaceX.Updater\BackupRestoreService.cs" Link="Core\BackupRestoreService.cs" />
+    <Compile Include="..\..\updater\AlfaRaceX.Updater\DfuDevice.cs" Link="Core\DfuDevice.cs" />
+    <Compile Include="..\..\updater\AlfaRaceX.Updater\IntelHexImage.cs" Link="Core\IntelHexImage.cs" />
+    <Compile Include="..\..\updater\AlfaRaceX.Updater\ManifestClient.cs" Link="Core\ManifestClient.cs" />
+    <Compile Include="..\..\updater\AlfaRaceX.Updater\Models.cs" Link="Core\Models.cs" />
+    <Compile Include="..\..\updater\AlfaRaceX.Updater\UpdateCoordinator.cs" Link="Core\UpdateCoordinator.cs" />
+    <Compile Include="..\..\updater\AlfaRaceX.Updater\UsbDeviceEnumerator.cs" Link="Core\UsbDeviceEnumerator.cs" />
+    <Compile Include="..\..\updater\AlfaRaceX.Updater\WinUsbNative.cs" Link="Core\WinUsbNative.cs" />
+  </ItemGroup>
+</Project>
