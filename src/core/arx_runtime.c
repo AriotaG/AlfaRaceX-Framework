@@ -1773,31 +1773,64 @@ size_t arx_runtime_drain_can(ArxRuntime *rt,uint32_t now_ms,size_t budget) {
     return sent;
 }
 
+static bool interchip_diag_offset(
+    const ArxInterchipQueue *q,uint8_t *offset
+) {
+    if(!q||!offset)return false;
+    for(uint8_t i=0u;i<q->count;i++){
+        const uint8_t index=(uint8_t)((q->head+i)%ARX_INTERCHIP_QUEUE_SIZE);
+        const uint8_t dest=q->items[index].bytes[0];
+        if(dest>=ARX_LINK_TO_C2&&dest<=ARX_LINK_TO_MASTER){
+            *offset=i;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void interchip_remove_offset(ArxInterchipQueue *q,uint8_t offset) {
+    if(!q||offset>=q->count)return;
+    for(uint8_t i=offset;i+1u<q->count;i++){
+        const uint8_t dst=(uint8_t)((q->head+i)%ARX_INTERCHIP_QUEUE_SIZE);
+        const uint8_t src=(uint8_t)((q->head+i+1u)%ARX_INTERCHIP_QUEUE_SIZE);
+        q->items[dst]=q->items[src];
+    }
+    q->tail=(uint8_t)((q->tail+ARX_INTERCHIP_QUEUE_SIZE-1u)%ARX_INTERCHIP_QUEUE_SIZE);
+    q->count--;
+}
+
 size_t arx_runtime_drain_interchip(ArxRuntime *rt,uint32_t now_ms,size_t budget) {
     if(!rt||!rt->ops.interchip_send)return 0u;
     size_t sent=0u;
 
     while(sent<budget){
-        const ArxInterchipFrame *f=NULL;
-        if(!arx_interchip_queue_peek(&rt->interchip.tx,&f))break;
+        uint8_t diag_offset=0u;
+        if(interchip_diag_offset(&rt->interchip.tx,&diag_offset)){
+            if(now_ms<rt->interchip.boot_ignore_ms)break;
+            const uint8_t index=(uint8_t)(
+                (rt->interchip.tx.head+diag_offset)%ARX_INTERCHIP_QUEUE_SIZE
+            );
+            const ArxInterchipFrame frame=rt->interchip.tx.items[index];
+            if(!rt->ops.interchip_send(frame.bytes,rt->ops.user))break;
+            interchip_remove_offset(&rt->interchip.tx,diag_offset);
+            rt->interchip.last_tx_ms=now_ms;
+            rt->interchip_tx_frames++;
+            sent++;
+            continue;
+        }
 
-        const bool diagnostic=
-            f->bytes[0]>=ARX_LINK_TO_C2&&f->bytes[0]<=ARX_LINK_TO_MASTER;
-        const bool allowed=diagnostic
-            ?(now_ms>=rt->interchip.boot_ignore_ms)
-            :arx_interchip_tx_allowed(&rt->interchip,now_ms);
-        if(!allowed)break;
-
-        if(!rt->ops.interchip_send(f->bytes,rt->ops.user))break;
+        if(!arx_interchip_tx_allowed(&rt->interchip,now_ms))break;
+        const ArxInterchipFrame *frame=NULL;
+        if(!arx_interchip_queue_peek(&rt->interchip.tx,&frame))break;
+        if(!rt->ops.interchip_send(frame->bytes,rt->ops.user))break;
 
         arx_interchip_queue_commit(&rt->interchip.tx);
         rt->interchip.last_tx_ms=now_ms;
         rt->interchip_tx_frames++;
         sent++;
 
-        /* Normal master traffic keeps the deployed 250 ms slot. Diagnostic
-           frames use their own framing/checksum and may drain consecutively. */
-        if(rt->role==ARX_RUNTIME_C1&&!diagnostic)break;
+        /* Normal master traffic keeps the deployed 250 ms slot. */
+        if(rt->role==ARX_RUNTIME_C1)break;
     }
     return sent;
 }
