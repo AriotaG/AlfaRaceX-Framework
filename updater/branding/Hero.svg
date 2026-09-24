@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="430" viewBox="0 0 1400 430">
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+    <stop stop-color="#071018"/><stop offset=".58" stop-color="#111319"/><stop offset="1" stop-color="#4b1714"/>
+  </linearGradient>
+  <radialGradient id="sun" cx=".78" cy=".22" r=".36">
+    <stop stop-color="#ffb45a" stop-opacity=".9"/><stop offset=".28" stop-color="#d72a22" stop-opacity=".35"/><stop offset="1" stop-color="#090b10" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="road" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#15181e"/><stop offset="1" stop-color="#050608"/></linearGradient>
+  <linearGradient id="redcar" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff2234"/><stop offset=".44" stop-color="#a60616"/><stop offset="1" stop-color="#31020a"/></linearGradient>
+  <linearGradient id="darkcar" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#7b818a"/><stop offset=".38" stop-color="#1d2229"/><stop offset="1" stop-color="#05070a"/></linearGradient>
+  <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#253b4b"/><stop offset="1" stop-color="#05080d"/></linearGradient>
+  <filter id="glow"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="shadow"><feDropShadow dx="0" dy="16" stdDeviation="15" flood-color="#000" flood-opacity=".8"/></filter>
+</defs>
+<rect width="1400" height="430" fill="url(#sky)"/><rect width="1400" height="430" fill="url(#sun)"/>
+<path d="M0 220 L150 120 235 185 355 72 455 160 545 98 670 202 790 112 930 188 1040 80 1160 170 1260 110 1400 205 1400 300 0 300Z" fill="#090c11"/>
+<path d="M0 250 L210 175 320 245 455 142 595 238 755 162 900 244 1050 151 1190 232 1400 172 1400 315 0 315Z" fill="#0d1218" opacity=".92"/>
+<path d="M0 300 C380 272 790 270 1400 305 L1400 430 0 430Z" fill="url(#road)"/>
+<path d="M820 430 L1005 300 H1080 L945 430Z" fill="#e8e8e8" opacity=".45"/>
+<path d="M1090 430 L1175 330 H1215 L1150 430Z" fill="#d8001d" opacity=".65" filter="url(#glow)"/>
+<!-- Stelvio-inspired SUV -->
+<g transform="translate(655 112)" filter="url(#shadow)">
+  <ellipse cx="315" cy="257" rx="280" ry="28" fill="#000" opacity=".7"/>
+  <path d="M70 208 C92 139 154 99 235 88 L387 78 C467 78 527 107 567 163 L608 196 596 253 61 253 48 225Z" fill="url(#redcar)" stroke="#e6434f" stroke-width="3"/>
+  <path d="M193 101 L382 91 C438 91 484 112 516 149 L167 149 C174 129 181 114 193 101Z" fill="url(#glass)" stroke="#606b76" stroke-width="2"/>
+  <path d="M177 153 L518 153" stroke="#f34a55" stroke-width="3" opacity=".65"/>
+  <path d="M98 182 C123 169 158 165 191 170 L177 197 89 203Z" fill="#eff8ff" opacity=".9" filter="url(#glow)"/>
+  <path d="M473 168 C505 166 541 174 565 190 L548 207 471 196Z" fill="#eff8ff" opacity=".9" filter="url(#glow)"/>
+  <path d="M318 166 L347 178 331 220 305 220 288 178Z" fill="#050608" stroke="#8f969d" stroke-width="2"/>
+  <circle cx="142" cy="246" r="48" fill="#07080a" stroke="#40454b" stroke-width="8"/><circle cx="142" cy="246" r="22" fill="#171a1e"/>
+  <circle cx="514" cy="246" r="48" fill="#07080a" stroke="#40454b" stroke-width="8"/><circle cx="514" cy="246" r="22" fill="#171a1e"/>
+</g>
+<!-- Giulia-inspired sedan -->
+<g transform="translate(310 178) scale(.78)" filter="url(#shadow)">
+  <ellipse cx="315" cy="257" rx="280" ry="28" fill="#000" opacity=".72"/>
+  <path d="M55 211 C88 154 151 123 237 110 L396 108 C466 111 522 136 568 178 L613 205 598 252 48 252 37 229Z" fill="url(#darkcar)" stroke="#7a828c" stroke-width="3"/>
+  <path d="M195 121 L391 119 C444 121 485 137 516 163 L162 163 C171 144 181 130 195 121Z" fill="url(#glass)" stroke="#64717c" stroke-width="2"/>
+  <path d="M92 188 C121 177 152 175 189 179 L174 201 83 207Z" fill="#f4fbff" opacity=".9" filter="url(#glow)"/>
+  <path d="M473 179 C509 179 541 188 561 201 L547 213 470 203Z" fill="#f4fbff" opacity=".9" filter="url(#glow)"/>
+  <path d="M318 177 L347 188 331 225 305 225 288 188Z" fill="#050608" stroke="#9ca3aa" stroke-width="2"/>
+  <circle cx="142" cy="246" r="48" fill="#07080a" stroke="#41464d" stroke-width="8"/><circle cx="142" cy="246" r="22" fill="#171a1e"/>
+  <circle cx="514" cy="246" r="48" fill="#07080a" stroke="#41464d" stroke-width="8"/><circle cx="514" cy="246" r="22" fill="#171a1e"/>
+</g>
+<path d="M0 0 H1400 V430 H0Z" fill="none" stroke="#26313b" stroke-width="2"/>
+</svg>
