@@ -4,6 +4,9 @@ internal sealed class UpdateCoordinator
 {
     private readonly ManifestClient _client = new();
 
+    public Task<UpdaterManifest> LoadUpdaterManifestAsync(CancellationToken ct) =>
+        _client.GetUpdaterManifestAsync(AppConstants.UpdaterManifestUrl, ct);
+
     public Task<UpdateManifest> LoadManifestAsync(CancellationToken ct) =>
         _client.GetManifestAsync(AppConstants.DefaultManifestUrl, ct);
 
