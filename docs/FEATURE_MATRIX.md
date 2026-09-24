@@ -33,8 +33,8 @@ bench/vehicle validation, not missing target code.
 | Exhaust flap | `arx_qv_exhaust` | Core parity |
 | LED strip meter | `arx_led_strip` | Core parity; WS2812 PWM encoding and STM32 TIM1/DMA target source implemented, hardware validation pending |
 | Low-consume policy | `arx_power` | Core parity; STM32 reset/transceiver GPIO contract implemented, hardware validation pending |
-| CAN sniffer | `arx_sniffer` | Portable parity incl. binary buffering/streaming; USB FS target linked, physical validation pending |
-| ELM-compatible diagnostics | `arx_elm327` | Portable parity incl. AT core, ISO-TP and multi-bus routing; USB FS target linked, physical validation pending |
+| CAN sniffer | `arx_sniffer` | Portable parity incl. binary buffering/streaming; role-aware CDC target linked, including temporary BH/C2 MSC->CDC switching; physical validation pending |
+| ELM-compatible diagnostics | `arx_elm327` | AT interpreter, ISO-TP, CDC RX/TX and C1->C2/BH 19-byte relay are runtime-wired and host-tested; physical USB/CAN validation pending |
 | Dashboard/menu | `arx_dashboard` | Diesel 55-page BACCAble order, 18-character value rendering, wheel/menu runtime and BH telematic scheduling implemented; vehicle replay/target validation pending |
 | Remote start | experimental | Excluded from stable profile |
 | Internal test-only functions | n/a | Excluded from stable profile |
@@ -47,6 +47,6 @@ Detailed parity tracking: [`FUNCTION_AUDIT.md`](FUNCTION_AUDIT.md).
 | Performance statistics | `arx_performance` | Core parity for 0-100 / 100-200 + best update |
 | Max Hold | `arx_max_hold` | Core parity |
 | Runtime configuration | `arx_config` | 32-slot migration + improved dual-slot CRC persistence model |
-| Diesel telemetry database | `arx_telemetry_db` | Exact 55-page BACCAble 4.7 diesel contract implemented, including paired pages, 500 ms UDS polling, battery SoC (0x19BD) and native battery current (0x41A); physical vehicle validation pending |
+| Diesel telemetry database | `arx_telemetry_db` | 55-page deployed/reference diesel contract implemented, including paired pages, 500 ms UDS polling, battery SoC (0x19BD) and native battery current (0x41A). The physical unit audited for RC5 identifies its installed firmware as BACCAble V3.2.4; physical vehicle validation remains pending |
 
 Hardware target contract: [`TARGET_STM32F072.md`](TARGET_STM32F072.md).
