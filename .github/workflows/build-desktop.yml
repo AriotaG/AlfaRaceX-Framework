@@ -1,0 +1,103 @@
+name: Build AlfaRaceX Desktop
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - desktop-v1
+    paths:
+      - "desktop/**"
+      - "updater/AlfaRaceX.Updater/**"
+      - "updater/branding/**"
+      - "distribution/**"
+      - ".github/workflows/build-desktop.yml"
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "updater/AlfaRaceX.Updater/**"
+      - "updater/branding/**"
+      - "distribution/**"
+      - ".github/workflows/build-desktop.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-package:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - name: Vendor local Bootstrap assets
+        working-directory: desktop/AlfaRaceX.Desktop
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          New-Item -ItemType Directory -Force -Path wwwroot/vendor/bootstrap/css | Out-Null
+          New-Item -ItemType Directory -Force -Path wwwroot/vendor/bootstrap/js | Out-Null
+          Copy-Item node_modules/bootstrap/dist/css/bootstrap.min.css wwwroot/vendor/bootstrap/css/bootstrap.min.css -Force
+          Copy-Item node_modules/bootstrap/dist/js/bootstrap.bundle.min.js wwwroot/vendor/bootstrap/js/bootstrap.bundle.min.js -Force
+
+      - name: Restore and build
+        run: |
+          dotnet restore desktop/AlfaRaceX.Desktop/AlfaRaceX.Desktop.csproj
+          dotnet build desktop/AlfaRaceX.Desktop/AlfaRaceX.Desktop.csproj -c Release --no-restore
+
+      - name: Publish Windows x64
+        run: |
+          dotnet publish desktop/AlfaRaceX.Desktop/AlfaRaceX.Desktop.csproj -c Release -r win-x64 --self-contained true --no-restore -o publish
+
+      - name: Smoke test published executable
+        run: |
+          & .\publish\AlfaRaceX.exe --smoke-test
+          if ($LASTEXITCODE -ne 0) { throw "Published executable smoke test failed." }
+
+      - name: Install Velopack CLI
+        run: dotnet tool install -g vpk --version 1.2.0
+
+      - name: Create Velopack installer
+        run: |
+          vpk pack --packId AlfaRaceX.Desktop --packVersion 0.1.0 --packDir publish --mainExe AlfaRaceX.exe --packTitle AlfaRaceX
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $setup = Get-ChildItem Releases -Filter "*Setup.exe" | Select-Object -First 1
+          if (-not $setup) { throw "Velopack Setup.exe not found." }
+          Copy-Item $setup.FullName artifacts/AlfaRaceX-Setup.exe -Force
+          $hash = (Get-FileHash artifacts/AlfaRaceX-Setup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  AlfaRaceX-Setup.exe" | Out-File -Encoding ascii artifacts/AlfaRaceX-Setup.sha256
+
+      - name: Install generated Setup and smoke test installed app
+        run: |
+          $installRoot = Join-Path $env:RUNNER_TEMP "AlfaRaceX-Installed"
+          if (Test-Path $installRoot) { Remove-Item $installRoot -Recurse -Force }
+          & .\artifacts\AlfaRaceX-Setup.exe --silent --installto $installRoot
+          if ($LASTEXITCODE -ne 0) { throw "Installer returned exit code $LASTEXITCODE." }
+          Start-Sleep -Seconds 2
+          $exe = Get-ChildItem $installRoot -Recurse -Filter "AlfaRaceX.exe" | Select-Object -First 1
+          if (-not $exe) { throw "Installed AlfaRaceX.exe not found." }
+          & $exe.FullName --smoke-test
+          if ($LASTEXITCODE -ne 0) { throw "Installed executable smoke test failed." }
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlfaRaceX-Desktop-Setup-win-x64
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            artifacts/AlfaRaceX-Setup.exe
+            artifacts/AlfaRaceX-Setup.sha256
+            Releases/*.nupkg
+            Releases/RELEASES
