@@ -34,7 +34,10 @@ internal sealed class MainForm : Form
         Text = $"AlfaRaceX Updater {AppConstants.UpdaterVersion}";
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         ClientSize = new Size(1540, 860);
-        MinimumSize = new Size(1280, 760);
+        MinimumSize = new Size(1540, 860);
+        MaximumSize = new Size(1540, 860);
+        FormBorderStyle = FormBorderStyle.FixedSingle;
+        MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = ArxTheme.Background;
         ForeColor = ArxTheme.Text;
@@ -178,7 +181,7 @@ internal sealed class MainForm : Form
 
         var heroShade = new Label
         {
-            BackColor = Color.FromArgb(125, 0, 0, 0),
+            BackColor = Color.Transparent,
             ForeColor = Color.White,
             Text = "ALFARACEX\r\nPERFORMANCE · DIAGNOSTICS · CONTROL",
             Font = ArxTheme.Font(12f, FontStyle.Bold),
