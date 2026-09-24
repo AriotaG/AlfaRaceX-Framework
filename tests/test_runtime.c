@@ -187,7 +187,7 @@ static void telemetry_runtime_unit(void){
     rt.menu.visible=true;
     rt.menu.level=ARX_MENU_LEVEL_SUB;
     rt.menu.main_page=1u;
-    rt.menu.param_page=5u; /* BAT SoC + current, exact BACCAble diesel page 6 */
+    rt.menu.param_page=5u; /* BAT SoC + current, exact reference diesel page 6 */
 
     ArxCanFrame bat={.bus=ARX_BUS_C1,.id=0x41Au,.dlc=6,
         .data={0,70,0,0,0x9C,0x40}};
