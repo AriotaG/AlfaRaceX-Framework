@@ -29,7 +29,7 @@ for ld in (TARGET/'linker').glob('*.ld'):
         errors.append(f'linker discards runtime library: {ld.relative_to(ROOT)}')
 
 cmake=(TARGET/'CMakeLists.txt').read_text(errors='ignore')
-for name in ('arx_stm32f072_usb.c','arx_stm32f072_log.c','usbd_cdc.c','usbd_msc.c','usbd_msc_bot.c','usbd_msc_scsi.c','--gc-sections','check_firmware_size.py'):
+for name in ('arx_stm32f072_usb.c','arx_stm32f072_log.c','usbd_cdc.c','usbd_msc.c','usbd_msc_bot.c','usbd_msc_scsi.c','usbd_msc_data.c','--gc-sections','check_firmware_size.py'):
     if name not in cmake: errors.append(f'target build omits required item: {name}')
 
 runtime=(ROOT/'src'/'core'/'arx_runtime.c').read_text(errors='ignore')
