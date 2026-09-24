@@ -12,7 +12,27 @@ internal sealed class ManifestClient
 
     public ManifestClient()
     {
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("AlfaRaceX-Updater/0.2.0");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd(
+            $"AlfaRaceX-Updater/{AppConstants.UpdaterVersion}");
+    }
+
+    public async Task<UpdaterManifest> GetUpdaterManifestAsync(string url, CancellationToken ct)
+    {
+        await using var stream = await _http.GetStreamAsync(url, ct);
+        var manifest = await JsonSerializer.DeserializeAsync<UpdaterManifest>(
+            stream, cancellationToken: ct)
+            ?? throw new InvalidDataException("Manifest Updater non valido.");
+
+        if (!string.Equals(
+            manifest.Product, AppConstants.ProductName, StringComparison.Ordinal))
+            throw new InvalidDataException(
+                "Il manifest Updater non appartiene ad AlfaRaceX.");
+
+        if (string.IsNullOrWhiteSpace(manifest.Version) ||
+            string.IsNullOrWhiteSpace(manifest.ReleaseUrl))
+            throw new InvalidDataException("Manifest Updater incompleto.");
+
+        return manifest;
     }
 
     public async Task<UpdateManifest> GetManifestAsync(string url, CancellationToken ct)

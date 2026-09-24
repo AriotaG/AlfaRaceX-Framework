@@ -2,6 +2,13 @@ using System.Text.Json.Serialization;
 
 namespace AlfaRaceX.Updater;
 
+internal sealed class UpdaterManifest
+{
+    [JsonPropertyName("product")] public string Product { get; set; } = "";
+    [JsonPropertyName("version")] public string Version { get; set; } = "";
+    [JsonPropertyName("releaseUrl")] public string ReleaseUrl { get; set; } = "";
+}
+
 internal sealed class UpdateManifest
 {
     [JsonPropertyName("product")] public string Product { get; set; } = "";
