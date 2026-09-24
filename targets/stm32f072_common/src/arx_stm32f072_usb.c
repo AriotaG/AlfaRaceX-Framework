@@ -266,8 +266,8 @@ static USBD_CDC_ItfTypeDef cdc_ops={
 
 void *arx_usbd_static_malloc(uint32_t size){
     enum {
-        words=(sizeof(USBD_MSC_BOT_HandleTypeDef)>sizeof(USBD_CDC_HandleTypeDef)
-            ?sizeof(USBD_MSC_BOT_HandleTypeDef):sizeof(USBD_CDC_HandleTypeDef)+3u)/4u
+        words=((sizeof(USBD_MSC_BOT_HandleTypeDef)>sizeof(USBD_CDC_HandleTypeDef)
+            ?sizeof(USBD_MSC_BOT_HandleTypeDef):sizeof(USBD_CDC_HandleTypeDef))+3u)/4u
     };
     static uint32_t memory[words];
     if(size>sizeof(memory))return NULL;
@@ -332,7 +332,7 @@ USBD_StatusTypeDef USBD_LL_OpenEP(USBD_HandleTypeDef *pdev,uint8_t ep,uint8_t ty
 USBD_StatusTypeDef USBD_LL_CloseEP(USBD_HandleTypeDef *pdev,uint8_t ep){return HAL_PCD_EP_Close((PCD_HandleTypeDef*)pdev->pData,ep)==HAL_OK?USBD_OK:USBD_FAIL;}
 USBD_StatusTypeDef USBD_LL_FlushEP(USBD_HandleTypeDef *pdev,uint8_t ep){return HAL_PCD_EP_Flush((PCD_HandleTypeDef*)pdev->pData,ep)==HAL_OK?USBD_OK:USBD_FAIL;}
 USBD_StatusTypeDef USBD_LL_StallEP(USBD_HandleTypeDef *pdev,uint8_t ep){return HAL_PCD_EP_SetStall((PCD_HandleTypeDef*)pdev->pData,ep)==HAL_OK?USBD_OK:USBD_FAIL;}
-USBD_StatusTypeDef USBD_LL_ClearStallEP(USBD_HandleTypeDef *pdev,uint8_t ep){return HAL_PCD_EP_ClrStall((PCD_HandleTypeDef*)pdev->pData)==HAL_OK?USBD_OK:USBD_FAIL;}
+USBD_StatusTypeDef USBD_LL_ClearStallEP(USBD_HandleTypeDef *pdev,uint8_t ep){return HAL_PCD_EP_ClrStall((PCD_HandleTypeDef*)pdev->pData,ep)==HAL_OK?USBD_OK:USBD_FAIL;}
 uint8_t USBD_LL_IsStallEP(USBD_HandleTypeDef *pdev,uint8_t ep){PCD_HandleTypeDef *h=(PCD_HandleTypeDef*)pdev->pData;return (ep&0x80u)?h->IN_ep[ep&0x7Fu].is_stall:h->OUT_ep[ep&0x7Fu].is_stall;}
 USBD_StatusTypeDef USBD_LL_SetUSBAddress(USBD_HandleTypeDef *pdev,uint8_t addr){return HAL_PCD_SetAddress((PCD_HandleTypeDef*)pdev->pData,addr)==HAL_OK?USBD_OK:USBD_FAIL;}
 USBD_StatusTypeDef USBD_LL_Transmit(USBD_HandleTypeDef *pdev,uint8_t ep,uint8_t *buf,uint16_t size){return HAL_PCD_EP_Transmit((PCD_HandleTypeDef*)pdev->pData,ep,buf,size)==HAL_OK?USBD_OK:USBD_FAIL;}
