@@ -26,7 +26,15 @@ public partial class MainWindow : Window
         DesktopPaths.Ensure();
         _history.Initialize();
         _history.AddEvent("INFO", "APP", $"Avvio AlfaRaceX Desktop {AppVersion}.");
+        _history.AddEvent("INFO", "APP", $"OS: {Environment.OSVersion}; architettura processo: {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}.");
         Loaded += OnLoaded;
+        Closing += (_, e) =>
+        {
+            if (_operation is null) return;
+            e.Cancel = true;
+            _operation.Cancel();
+            Post("error", new { message = "Annullamento richiesto. Attendi l'arresto dell'operazione prima di chiudere." });
+        };
         Closed += (_, _) => _operation?.Cancel();
     }
 
@@ -39,6 +47,9 @@ public partial class MainWindow : Window
         {
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: DesktopPaths.WebView2);
             await Browser.EnsureCoreWebView2Async(environment);
+            Browser.CoreWebView2.ProcessFailed += (_, failure) =>
+                _history.AddEvent("ERROR", "WEBVIEW2",
+                    $"Processo {failure.ProcessFailedKind}, motivo {failure.Reason}, exit {failure.ExitCode}: {failure.ProcessDescription}");
 
             string webRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
             if (!Directory.Exists(webRoot))
@@ -58,6 +69,7 @@ public partial class MainWindow : Window
             Browser.CoreWebView2.NavigationStarting += (_, args) =>
             {
                 if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out Uri? uri) ||
+                    uri.Scheme != "https" || !uri.IsDefaultPort ||
                     !string.Equals(uri.Host, UiHost, StringComparison.OrdinalIgnoreCase))
                     args.Cancel = true;
             };
@@ -81,6 +93,9 @@ public partial class MainWindow : Window
     {
         try
         {
+            if (!Uri.TryCreate(e.Source, UriKind.Absolute, out var source) ||
+                source.Scheme != "https" || source.Host != UiHost || !source.IsDefaultPort)
+                throw new InvalidOperationException("Origine messaggio UI non autorizzata.");
             using JsonDocument doc = JsonDocument.Parse(e.WebMessageAsJson);
             JsonElement root = doc.RootElement;
             string action = root.TryGetProperty("action", out JsonElement a) ? a.GetString() ?? "" : "";
@@ -187,7 +202,12 @@ public partial class MainWindow : Window
     {
         int dfuCount;
         try { dfuCount = await Task.Run(() => UsbDeviceEnumerator.FindDfuPaths().Count); }
-        catch { dfuCount = 0; }
+        catch (Exception ex)
+        {
+            Log("ERROR", "USB", "Enumerazione USB fallita: " + ex.Message);
+            Post("error", new { message = "Impossibile determinare lo stato USB: " + ex.Message });
+            return;
+        }
 
         string firmwareVersion = _manifest?.Version ?? "—";
         string channel = _manifest?.Channel ?? "Release Candidate";
@@ -208,7 +228,12 @@ public partial class MainWindow : Window
         try
         {
             if (_manifest is null || force)
+            {
+                if (_operation is not null && force)
+                    throw new InvalidOperationException("Aggiornamento manifest non consentito durante un'operazione.");
                 _manifest = await _updates.LoadManifestAsync(CancellationToken.None);
+                _prepared.Clear();
+            }
 
             Post("manifest", new
             {
@@ -236,6 +261,7 @@ public partial class MainWindow : Window
     {
         await RunExclusiveAsync("UPDATE", async ct =>
         {
+            _prepared.Clear();
             _manifest ??= await _updates.LoadManifestAsync(ct);
             var progress = new Progress<(string Message, int Progress)>(p =>
                 Post("operationProgress", new { kind = "prepare", message = p.Message, progress = p.Progress }));
@@ -263,7 +289,12 @@ public partial class MainWindow : Window
                 Post("operationProgress", new { kind = "flash", role, message = p.Message, progress = p.Progress }));
 
             Log("INFO", "FLASH", $"Avvio programmazione {role} firmware {_manifest?.Version}.");
-            await _updates.FlashAsync(firmware, progress, msg => Log("INFO", "DFU", msg), ct);
+            BackupResult safetyBackup = await _backups.BackupAsync(role, DesktopPaths.Backups,
+                progress, msg => Log("INFO", "BACKUP", msg), ct);
+            _history.AddBackup(safetyBackup.Role, safetyBackup.BinPath, safetyBackup.MetadataPath,
+                safetyBackup.Sha256, safetyBackup.Size, DateTime.UtcNow, "pre-flash");
+            SendBackups();
+            await _updates.FlashAsync(firmware, progress, msg => Log("INFO", "DFU", msg), ct, safetyBackup);
             Log("INFO", "FLASH", $"Programmazione {role} completata e verificata.");
             Post("operationComplete", new { kind = "flash", role, message = $"{role} programmato e verificato." });
         });
@@ -314,6 +345,9 @@ public partial class MainWindow : Window
                 Post("operationProgress", new { kind = "restore", role = backup.Role, message = p.Message, progress = p.Progress }));
 
             Log("WARN", "RESTORE", $"Avvio ripristino {backup.Role} da {Path.GetFileName(backup.BinPath)}.");
+            string currentHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(backup.BinPath)));
+            if (!string.Equals(currentHash, backup.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Il backup è cambiato dopo la catalogazione. Ripristino rifiutato.");
             await _backups.RestoreAsync(
                 backup.Role,
                 backup.BinPath,
@@ -344,6 +378,7 @@ public partial class MainWindow : Window
             throw new InvalidDataException($"Backup non valido: attesi {BackupRestoreService.FlashSize} byte, trovati {info.Length}.");
 
         string sha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(dialog.FileName))).ToLowerInvariant();
+        BackupRestoreService.VerifyRequiredMetadata(role, dialog.FileName, sha);
         string metadata = Path.ChangeExtension(dialog.FileName, ".json");
         _history.AddBackup(role, dialog.FileName, File.Exists(metadata) ? metadata : string.Empty, sha, info.Length, info.CreationTimeUtc, "imported");
         Log("INFO", "BACKUP", $"Importato backup {role}: {Path.GetFileName(dialog.FileName)} ({sha}).");
@@ -432,6 +467,12 @@ public partial class MainWindow : Window
 
     private void Post(string type, object data)
     {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => Post(type, data));
+            return;
+        }
+        if (Dispatcher.HasShutdownStarted) return;
         if (Browser.CoreWebView2 is null)
             return;
         string json = JsonSerializer.Serialize(new { type, data });

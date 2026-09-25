@@ -13,16 +13,22 @@ internal sealed class IntelHexImage
         var image = new IntelHexImage();
         uint upper = 0;
         int lineNo = 0;
+        bool ended = false;
 
         foreach (string raw in File.ReadLines(path))
         {
             lineNo++;
             string line = raw.Trim();
             if (line.Length == 0) continue;
+            if (ended)
+                throw new InvalidDataException($"HEX riga {lineNo}: dati dopo EOF.");
             if (!line.StartsWith(':'))
                 throw new InvalidDataException($"HEX riga {lineNo}: prefisso mancante.");
 
-            byte[] record = Convert.FromHexString(line[1..]);
+            byte[] record;
+            try { record = Convert.FromHexString(line[1..]); }
+            catch (FormatException ex)
+            { throw new InvalidDataException($"HEX riga {lineNo}: codifica esadecimale non valida.", ex); }
             if (record.Length < 5)
                 throw new InvalidDataException($"HEX riga {lineNo}: record troppo corto.");
 
@@ -41,27 +47,37 @@ internal sealed class IntelHexImage
             switch (type)
             {
                 case 0x00:
+                    if ((ulong)upper + offset + (uint)count > (ulong)uint.MaxValue + 1)
+                        throw new InvalidDataException($"HEX riga {lineNo}: overflow indirizzo.");
                     for (int i = 0; i < count; i++)
-                        image._bytes[upper + offset + (uint)i] = record[4 + i];
+                        if (!image._bytes.TryAdd(upper + offset + (uint)i, record[4 + i]))
+                            throw new InvalidDataException($"HEX riga {lineNo}: indirizzo duplicato.");
                     break;
                 case 0x01:
-                    return image;
+                    if (count != 0 || offset != 0)
+                        throw new InvalidDataException("HEX: EOF non valido.");
+                    ended = true;
+                    break;
                 case 0x02:
-                    if (count != 2) throw new InvalidDataException("HEX: segmento esteso non valido.");
+                    if (count != 2 || offset != 0) throw new InvalidDataException("HEX: segmento esteso non valido.");
                     upper = (uint)(((record[4] << 8) | record[5]) << 4);
                     break;
                 case 0x04:
-                    if (count != 2) throw new InvalidDataException("HEX: indirizzo lineare non valido.");
+                    if (count != 2 || offset != 0) throw new InvalidDataException("HEX: indirizzo lineare non valido.");
                     upper = (uint)(((record[4] << 8) | record[5]) << 16);
                     break;
                 case 0x03:
                 case 0x05:
+                    if (count != 4 || offset != 0)
+                        throw new InvalidDataException("HEX: record di avvio non valido.");
                     break;
                 default:
                     throw new InvalidDataException($"HEX: tipo record 0x{type:X2} non supportato.");
             }
         }
 
+        if (!ended)
+            throw new InvalidDataException("HEX: EOF mancante; file troncato.");
         if (image._bytes.Count == 0)
             throw new InvalidDataException("Il firmware HEX non contiene dati.");
 
@@ -70,7 +86,7 @@ internal sealed class IntelHexImage
 
     public void ValidateApplicationRange(uint start, uint limitExclusive)
     {
-        if (start >= limitExclusive)
+        if (_bytes.Count == 0 || start >= limitExclusive)
             throw new InvalidDataException("Intervallo applicativo non valido.");
 
         foreach (uint address in _bytes.Keys)
@@ -83,6 +99,7 @@ internal sealed class IntelHexImage
 
     public IEnumerable<uint> TouchedPages(uint pageSize)
     {
+        if (pageSize == 0) throw new ArgumentOutOfRangeException(nameof(pageSize));
         var pages = new SortedSet<uint>();
         foreach (uint address in _bytes.Keys)
             pages.Add(address - (address % pageSize));

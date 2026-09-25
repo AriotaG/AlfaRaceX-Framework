@@ -2,6 +2,11 @@ name: Build AlfaRaceX Desktop
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish a draft prerelease after all software gates pass"
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -11,6 +16,7 @@ on:
       - "updater/AlfaRaceX.Updater/**"
       - "updater/branding/**"
       - "distribution/**"
+      - "tests/AlfaRaceX.HostTests/**"
       - ".github/workflows/build-desktop.yml"
   pull_request:
     paths:
@@ -18,6 +24,7 @@ on:
       - "updater/AlfaRaceX.Updater/**"
       - "updater/branding/**"
       - "distribution/**"
+      - "tests/AlfaRaceX.HostTests/**"
       - ".github/workflows/build-desktop.yml"
 
 permissions:
@@ -38,18 +45,14 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22.x"
-
-      - name: Vendor local Bootstrap assets
-        working-directory: desktop/AlfaRaceX.Desktop
+      - name: Verify vendored local Bootstrap assets
         run: |
-          npm install --ignore-scripts --no-audit --no-fund
-          New-Item -ItemType Directory -Force -Path wwwroot/vendor/bootstrap/css | Out-Null
-          New-Item -ItemType Directory -Force -Path wwwroot/vendor/bootstrap/js | Out-Null
-          Copy-Item node_modules/bootstrap/dist/css/bootstrap.min.css wwwroot/vendor/bootstrap/css/bootstrap.min.css -Force
-          Copy-Item node_modules/bootstrap/dist/js/bootstrap.bundle.min.js wwwroot/vendor/bootstrap/js/bootstrap.bundle.min.js -Force
+          foreach ($file in @('css/bootstrap.min.css','js/bootstrap.bundle.min.js','LICENSE')) {
+            if (!(Test-Path "desktop/AlfaRaceX.Desktop/wwwroot/vendor/bootstrap/$file")) { throw "Missing Bootstrap asset: $file" }
+          }
+
+      - name: Host validation tests
+        run: dotnet run --project tests/AlfaRaceX.HostTests -c Release
 
       - name: Restore and build
         run: |
@@ -62,15 +65,23 @@ jobs:
 
       - name: Smoke test published executable
         run: |
-          $proc = Start-Process -FilePath ".\publish\AlfaRaceX.exe" -ArgumentList "--smoke-test" -Wait -PassThru
+          $proc = Start-Process -FilePath ".\publish\AlfaRaceX.exe" -ArgumentList "--smoke-test" -WindowStyle Hidden -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw "Published executable smoke test failed with code $($proc.ExitCode)." }
+
+      - name: Verify actual WebView2 and UI bridge
+        run: |
+          $proc = Start-Process -FilePath ".\publish\AlfaRaceX.exe" -ArgumentList "--ui-smoke-test" -WindowStyle Hidden -PassThru
+          if (!$proc.WaitForExit(60000)) { Stop-Process -Id $proc.Id; throw "UI smoke timed out" }
+          if ($proc.ExitCode -ne 0) { throw "UI smoke failed: $($proc.ExitCode)" }
 
       - name: Install Velopack CLI
         run: dotnet tool install -g vpk --version 1.2.0
 
       - name: Create Velopack installer
         run: |
-          vpk pack --packId AlfaRaceX.Desktop --packVersion 0.1.0 --packDir publish --mainExe AlfaRaceX.exe --packTitle AlfaRaceX
+          [xml]$project = Get-Content desktop/AlfaRaceX.Desktop/AlfaRaceX.Desktop.csproj
+          $version = [string]$project.Project.PropertyGroup.Version
+          vpk pack --packId AlfaRaceX.Desktop --packVersion $version --packDir publish --mainExe AlfaRaceX.exe --packTitle AlfaRaceX --framework webview2
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           $setup = Get-ChildItem Releases -Filter "*Setup.exe" | Select-Object -First 1
           if (-not $setup) { throw "Velopack Setup.exe not found." }
@@ -81,13 +92,21 @@ jobs:
       - name: Install generated Setup and smoke test installed app
         run: |
           $installRoot = Join-Path $env:RUNNER_TEMP "AlfaRaceX-Installed"
-          if (Test-Path $installRoot) { Remove-Item $installRoot -Recurse -Force }
-          $setupProc = Start-Process -FilePath ".\artifacts\AlfaRaceX-Setup.exe" -ArgumentList @("--silent","--installto",$installRoot) -Wait -PassThru
+          if (Test-Path $installRoot) { throw "Install test directory must be fresh: $installRoot" }
+          $setupProc = Start-Process -FilePath ".\artifacts\AlfaRaceX-Setup.exe" -ArgumentList @("--silent","--installto",$installRoot) -WindowStyle Hidden -Wait -PassThru
           if ($setupProc.ExitCode -ne 0) { throw "Installer returned exit code $($setupProc.ExitCode)." }
           $exe = Get-ChildItem $installRoot -Recurse -Filter "AlfaRaceX.exe" | Select-Object -First 1
           if (-not $exe) { throw "Installed AlfaRaceX.exe not found." }
-          $smokeProc = Start-Process -FilePath $exe.FullName -ArgumentList "--smoke-test" -Wait -PassThru
+          $smokeProc = Start-Process -FilePath $exe.FullName -ArgumentList "--ui-smoke-test" -WindowStyle Hidden -Wait -PassThru
           if ($smokeProc.ExitCode -ne 0) { throw "Installed executable smoke test failed with code $($smokeProc.ExitCode)." }
+
+      - name: Upload smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-smoke-diagnostics
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/AlfaRaceX-Smoke-*/**
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
@@ -102,7 +121,7 @@ jobs:
             Releases/RELEASES
 
       - name: Publish AlfaRaceX Desktop release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -110,7 +129,6 @@ jobs:
           $version = [string]$project.Project.PropertyGroup.Version
           $tag = "desktop-v$version"
           gh release view $tag *> $null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --title "AlfaRaceX Desktop $version" --notes "Prima distribuzione Windows installabile di AlfaRaceX Desktop. Build WPF/WebView2 con dati persistenti separati, SQLite e packaging Velopack."
-          }
-          gh release upload $tag artifacts/AlfaRaceX-Setup.exe artifacts/AlfaRaceX-Setup.sha256 Releases/*-full.nupkg Releases/RELEASES --clobber
+          if ($LASTEXITCODE -eq 0) { throw "Release already exists; increment version. Published assets are immutable." }
+          gh release create $tag --draft --prerelease --target $env:GITHUB_SHA --title "AlfaRaceX Desktop $version" --notes "Software gates passed. Hardware validation required; see audit report."
+          gh release upload $tag artifacts/AlfaRaceX-Setup.exe artifacts/AlfaRaceX-Setup.sha256 Releases/*-full.nupkg Releases/RELEASES

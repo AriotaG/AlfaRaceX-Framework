@@ -15,6 +15,7 @@ internal sealed class UpdateCoordinator
         IProgress<(string Message, int Progress)> progress,
         CancellationToken ct)
     {
+        ManifestClient.ValidateManifest(manifest);
         string root = Path.Combine(Path.GetTempPath(), "AlfaRaceX-Updater", manifest.Version);
         var prepared = new List<PreparedFirmware>();
 
@@ -43,12 +44,24 @@ internal sealed class UpdateCoordinator
         PreparedFirmware firmware,
         IProgress<(string Message, int Progress)> progress,
         Action<string> log,
-        CancellationToken ct)
+        CancellationToken ct,
+        BackupResult? safetyBackup = null)
     {
-        return Task.Run(() =>
+        return Task.Run(async () =>
         {
+            ManifestClient.ValidateTarget(firmware.Target);
+            firmware.Image.ValidateApplicationRange(firmware.Target.ApplicationStart, firmware.Target.ApplicationLimitExclusive);
+            safetyBackup ??= await new BackupRestoreService().BackupAsync(firmware.Target.Id,
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AlfaRaceX", "Backups"),
+                progress, log, ct);
             progress.Report(($"Connessione {firmware.Target.Label}...", 0));
             using var dfu = DfuDevice.OpenSingle();
+            if (!string.Equals(dfu.DevicePath, safetyBackup.DevicePath, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Dispositivo cambiato dopo il backup: programmazione rifiutata.");
+            byte[] current = dfu.ReadMemory(BackupRestoreService.FlashStart, BackupRestoreService.FlashSize, null, ct);
+            string currentHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(current));
+            if (!string.Equals(currentHash, safetyBackup.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Contenuto Flash cambiato dopo il backup: programmazione rifiutata.");
 
             log($"Rilevato dispositivo DFU per {firmware.Target.Label}.");
             log($"HEX: 0x{firmware.Image.MinAddress:X8} - 0x{firmware.Image.MaxAddress:X8}.");
@@ -69,9 +82,9 @@ internal sealed class UpdateCoordinator
             {
                 dfu.Leave(firmware.Target.ApplicationStart);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
-                log($"{firmware.Target.Label}: disconnessione avvenuta dopo il comando di avvio.");
+                log($"{firmware.Target.Label}: Flash verificata; riavvio non confermato: {ex.Message}");
             }
 
             progress.Report(($"{firmware.Target.Label} completato.", 100));

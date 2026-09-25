@@ -30,3 +30,11 @@ Thumbs.db
 __pycache__/
 *.pyc
 .venv/
+
+# .NET and local UI dependencies
+**/bin/
+**/obj/
+**/node_modules/
+/publish/
+/Releases/
+/artifacts/

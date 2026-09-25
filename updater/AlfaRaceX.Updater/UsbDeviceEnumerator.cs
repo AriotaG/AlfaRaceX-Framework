@@ -38,6 +38,8 @@ internal static class UsbDeviceEnumerator
 
                 _ = WinUsbNative.SetupDiGetDeviceInterfaceDetail(
                     set, ref data, IntPtr.Zero, 0, out uint required, IntPtr.Zero);
+                if (Marshal.GetLastWin32Error() != 122 || required < 6 || required > 65536)
+                    throw new IOException("Dimensione percorso USB non valida durante enumerazione.");
 
                 IntPtr detail = Marshal.AllocHGlobal((int)required);
                 try
@@ -47,7 +49,9 @@ internal static class UsbDeviceEnumerator
                         set, ref data, detail, required, out _, IntPtr.Zero))
                         WinUsbNative.ThrowLast("Lettura percorso USB fallita.");
 
-                    IntPtr pathPtr = IntPtr.Add(detail, IntPtr.Size == 8 ? 8 : 4);
+                    // DevicePath follows a DWORD on both architectures. cbSize is
+                    // 8 on x64 because of tail padding, not because of field offset.
+                    IntPtr pathPtr = IntPtr.Add(detail, sizeof(uint));
                     string path = Marshal.PtrToStringUni(pathPtr) ?? "";
                     string lower = path.ToLowerInvariant();
 
