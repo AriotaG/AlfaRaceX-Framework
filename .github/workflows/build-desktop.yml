@@ -96,6 +96,13 @@ jobs:
             ${{ runner.temp }}/AlfaRaceX-Network-Test/network-validation.json
           if-no-files-found: warn
 
+      - name: Acquire signed offline WebView2 prerequisite
+        run: |
+          New-Item -ItemType Directory -Force prerequisites | Out-Null
+          Invoke-WebRequest 'https://go.microsoft.com/fwlink/?linkid=2124701' -OutFile prerequisites/WebView2.exe
+          $signature = Get-AuthenticodeSignature prerequisites/WebView2.exe
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') { throw 'WebView2 prerequisite signature invalid' }
+
       - name: Create Inno Setup installer
         run: |
           [xml]$project = Get-Content desktop/AlfaRaceX.Desktop/AlfaRaceX.Desktop.csproj
