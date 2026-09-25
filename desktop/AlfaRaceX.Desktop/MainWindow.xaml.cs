@@ -25,6 +25,9 @@ public partial class MainWindow : Window
         InitializeComponent();
         DesktopPaths.Ensure();
         _history.Initialize();
+        int interrupted = _history.RecoverInterruptedOperations();
+        if (interrupted > 0)
+            _history.AddEvent("ERROR", "RECOVERY", $"Rilevate {interrupted} operazioni senza esito dopo un arresto. Nessuna ripresa automatica. Verificare log e backup prima di nuove scritture.");
         _history.AddEvent("INFO", "APP", $"Avvio AlfaRaceX Desktop {AppVersion}.");
         _history.AddEvent("INFO", "APP", $"OS: {Environment.OSVersion}; architettura processo: {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}.");
         Loaded += OnLoaded;
@@ -190,7 +193,8 @@ public partial class MainWindow : Window
             repository = "https://github.com/AriotaG/AlfaRaceX-Framework",
             disclaimerVersion = DisclaimerVersion,
             disclaimerAccepted = IsDisclaimerAccepted(),
-            disclaimerAcceptedUtc = _history.GetSetting("DisclaimerAcceptedUtc")
+            disclaimerAcceptedUtc = _history.GetSetting("DisclaimerAcceptedUtc"),
+            interruptedOperations = _history.CountInterruptedOperations()
         });
         await SendDashboardAsync();
         await SendManifestAsync(force: false);
@@ -390,14 +394,18 @@ public partial class MainWindow : Window
         if (_operation is not null)
             throw new InvalidOperationException("È già in corso un'operazione. Attendi il completamento o annullala.");
 
+        string operationId = _history.BeginOperation(category);
         _operation = new CancellationTokenSource();
         Post("busy", new { value = true, category });
+        string outcome = "Failed";
         try
         {
             await work(_operation.Token);
+            outcome = "Completed";
         }
         catch (OperationCanceledException)
         {
+            outcome = "Cancelled";
             Log("WARN", category, "Operazione annullata.");
             Post("operationCancelled", new { category });
         }
@@ -408,10 +416,14 @@ public partial class MainWindow : Window
         }
         finally
         {
-            _operation.Dispose();
-            _operation = null;
-            Post("busy", new { value = false, category });
-            SendLogs();
+            try { _history.FinishOperation(operationId, outcome); }
+            finally
+            {
+                _operation.Dispose();
+                _operation = null;
+                Post("busy", new { value = false, category });
+                SendLogs();
+            }
         }
     }
 

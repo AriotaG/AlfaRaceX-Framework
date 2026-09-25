@@ -80,6 +80,30 @@ try
     Test("verified download preserves bytes", () => DownloadCase([1, 2, 3, 4], true, false));
     Test("download wrong hash leaves no partial file", () => DownloadCase([1, 2, 3, 4], false, true));
     Test("oversized download rejected", () => DownloadCase(new byte[1024 * 1024 + 1], true, true));
+    AlfaRaceX.Desktop.DesktopPaths.TestRoot = Path.Combine(root, "desktop");
+    AlfaRaceX.Desktop.DesktopPaths.Ensure();
+    var history = new AlfaRaceX.Desktop.HistoryRepository(AlfaRaceX.Desktop.DesktopPaths.Database);
+    history.Initialize();
+    Test("SQLite setting survives reopen", () => {
+        history.SetSetting("test'key", "persisted' 123");
+        var reopened = new AlfaRaceX.Desktop.HistoryRepository(AlfaRaceX.Desktop.DesktopPaths.Database);
+        if (reopened.GetSetting("test'key") != "persisted' 123") throw new Exception("Setting lost");
+    });
+    Test("interrupted operation recovered once", () => {
+        history.BeginOperation("FLASH");
+        var reopened = new AlfaRaceX.Desktop.HistoryRepository(AlfaRaceX.Desktop.DesktopPaths.Database);
+        if (reopened.RecoverInterruptedOperations() != 1 || reopened.RecoverInterruptedOperations() != 0 || reopened.CountInterruptedOperations() != 1)
+            throw new Exception("Recovery state incorrect");
+    });
+    Test("completed failed cancelled operations not recovered", () => {
+        foreach (string status in new[] { "Completed", "Failed", "Cancelled" })
+            history.FinishOperation(history.BeginOperation("BACKUP"), status);
+        if (history.RecoverInterruptedOperations() != 0) throw new Exception("Finished operation recovered");
+    });
+    Test("clearing logs preserves operation journal", () => {
+        history.AddEvent("INFO", "TEST", "CI fixture"); history.ClearEvents();
+        if (history.GetEvents().Count != 0 || history.CountInterruptedOperations() != 1) throw new Exception("Journal erased with logs");
+    });
     string backupPath = Path.Combine(root, "AlfaRaceX-C1.bin");
     string hash = new string('a', 64);
     BackupMetadata Meta() => new() { Role = "C1", FlashStart = 0x08000000, FlashSize = 131072,
@@ -92,7 +116,7 @@ try
     Test("backup wrong memory map", () => Reject(() => { var m = Meta(); m.FlashSize = 65536; Metadata(m); BackupRestoreService.VerifyRequiredMetadata("C1", backupPath, hash); }));
     Test("backup wrong file", () => Reject(() => { var m = Meta(); m.FileName = "other.bin"; Metadata(m); BackupRestoreService.VerifyRequiredMetadata("C1", backupPath, hash); }));
 }
-finally { Directory.Delete(root, true); }
+finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
 Console.WriteLine($"Failed: {failed}");
 return failed == 0 ? 0 : 1;
 

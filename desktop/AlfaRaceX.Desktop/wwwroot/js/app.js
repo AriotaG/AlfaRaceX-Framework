@@ -100,6 +100,8 @@
         $('infoBackup').textContent = d.backupRoot;
         $('infoDb').textContent = d.database;
         $('disclaimerGate').hidden = state.disclaimerAccepted;
+        $('recoveryNotice').hidden = !(d.interruptedOperations > 0);
+        $('recoveryNotice').textContent = `Il registro contiene ${d.interruptedOperations || 0} operazioni interrotte senza esito. Consulta i log e verifica backup e dispositivo prima di nuove scritture. Nessuna operazione viene ripresa automaticamente.`;
         break;
       case 'disclaimerAccepted':
         state.disclaimerAccepted = true;

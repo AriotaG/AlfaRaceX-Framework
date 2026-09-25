@@ -7,6 +7,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.31" />
+    <Compile Include="../../desktop/AlfaRaceX.Desktop/HistoryRepository.cs" Link="HistoryRepository.cs" />
+    <Compile Include="../../desktop/AlfaRaceX.Desktop/DesktopPaths.cs" Link="DesktopPaths.cs" />
     <Compile Include="../../updater/AlfaRaceX.Updater/IntelHexImage.cs" Link="IntelHexImage.cs" />
     <Compile Include="../../updater/AlfaRaceX.Updater/ManifestClient.cs" Link="ManifestClient.cs" />
     <Compile Include="../../updater/AlfaRaceX.Updater/Models.cs" Link="Models.cs" />

@@ -2,6 +2,14 @@ namespace AlfaRaceX.Desktop;
 
 internal static class SmokeTest
 {
+    public static void SeedInterruptedOperation()
+    {
+        // Synthetic interrupted record in the isolated smoke profile; no device access.
+        var repository = new HistoryRepository(DesktopPaths.Database);
+        repository.Initialize();
+        repository.BeginOperation("FLASH");
+    }
+
     public static int Run()
     {
         try
@@ -50,6 +58,7 @@ internal static class SmokeTest
                     throw new InvalidOperationException("UI smoke: " + label);
             }
             await AssertJs("document.getElementById('disclaimerGate').hidden === false", "disclaimer primo avvio");
+            await AssertJs("document.getElementById('recoveryNotice').hidden === false", "avviso operazione interrotta");
             await window.Browser.ExecuteScriptAsync("document.getElementById('disclaimerAcceptBtn').click()");
             deadline = DateTime.UtcNow.AddSeconds(5);
             while (await window.Browser.ExecuteScriptAsync("document.getElementById('disclaimerGate').hidden") != "true")
@@ -66,7 +75,7 @@ internal static class SmokeTest
                 await AssertJs($"document.getElementById('page-{page}').classList.contains('active')", "navigazione " + page);
             }
             await AssertJs("document.styleSheets.length >= 2 && typeof bootstrap === 'object'", "risorse Bootstrap locali");
-            File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), "PASS: WebView2, bridge, disclaimer persistito, sei viste, Bootstrap locale.");
+            File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), "PASS: WebView2, bridge, disclaimer persistito, recovery journal, sei viste, Bootstrap locale.");
             return 0;
         }
         catch (Exception ex)

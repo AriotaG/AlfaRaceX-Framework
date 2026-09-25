@@ -41,7 +41,8 @@ firmware sbagliato su un dispositivo utile.
 ## Windows e installer
 
 Usare VM Windows pulita con snapshot e utente standard. Nessuna installazione
-preesistente AlfaRaceX nel profilo. Annotare versione Windows e assenza/presenza
+preesistente AlfaRaceX nel profilo. Dopo la disinstallazione attendere la scomparsa della cartella installata prima
+di reinstallare nello stesso percorso (cleanup Velopack differito). Annotare versione Windows e assenza/presenza
 WebView2. Non utilizzare il catalogo backup reale per test distruttivi.
 
 | ID | Procedura | PASS | FAIL / evidenza / recupero |
@@ -54,7 +55,7 @@ WebView2. Non utilizzare il catalogo backup reale per test distruttivi.
 | W06 | Negare scrittura cartella dati/DB e rendere SQLite non accessibile | Errore comprensibile e nessuna operazione hardware iniziata | Stack/log di startup e bridge; ripristinare ACL della VM |
 | W07 | Manifest irraggiungibile/malformato, hash errato, download interrotto | Nessun firmware preparato né bottone flash valido; niente file parziale accettato | Log e directory temporanea; ripristinare rete test |
 | W08 | Eseguire smoke di base e UI reale sull'app pubblicata e installata | Exit 0, disclaimer registrato, tutte le viste e Bootstrap caricati | Conservare `%TEMP%/AlfaRaceX-Smoke-*`, eventi WebView2; no bypass sandbox |
-| W09 | Chiudere/cancellare operazione lunga e riavviare dopo crash controllato | UI reattiva, stato finale coerente e recovery esplicito | Il journal persistente manca: prova non promuovibile finché implementato |
+| W09 | Chiudere/cancellare operazione lunga e riavviare dopo crash controllato | UI reattiva, stato finale coerente e recovery esplicito | Journal di rilevamento aggiunto; rollback e recovery fisico restano da provare |
 
 La qualifica finale richiede evidenze H e W pertinenti, matrice aggiornata e controllo
 dei binari esatti distribuiti. Un risultato su eseguibile differente non qualifica

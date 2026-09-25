@@ -71,7 +71,14 @@ Assert-FixtureUnchanged
 Run-TestProcess $installedExe @('--ui-smoke-test') 60000
 Run-TestProcess (Join-Path $testInstall 'Update.exe') @('--silent','uninstall')
 Assert-FixtureUnchanged
-if (Test-Path -LiteralPath $installedExe) { throw 'Application executable remains after uninstall.' }
+# Velopack 1.2.0 schedules directory removal after Update.exe exits. Reinstalling
+# before that completion lets its cleanup process delete the new installation.
+$cleanupDeadline = [DateTime]::UtcNow.AddSeconds(30)
+while (Test-Path -LiteralPath $testInstall) {
+    if ([DateTime]::UtcNow -gt $cleanupDeadline) { throw 'Uninstall directory cleanup did not complete.' }
+    Start-Sleep -Milliseconds 250
+}
+Write-Output 'PASS: uninstall directory cleanup completed.'
 Install-TestApp
 Assert-FixtureUnchanged
 Run-TestProcess $installedExe @('--ui-smoke-test') 60000

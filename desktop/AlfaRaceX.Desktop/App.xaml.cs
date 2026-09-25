@@ -19,17 +19,30 @@ public partial class App : Application
         if (args.Any(a => string.Equals(a, "--smoke-test", StringComparison.OrdinalIgnoreCase)))
             return SmokeTest.Run();
 
-        DesktopPaths.Ensure();
-        var app = new App();
-        app.InitializeComponent();
-        var window = new MainWindow();
-        if (uiSmoke)
+        using var instance = new Mutex(true,
+            uiSmoke ? "Local\\AlfaRaceX.Smoke." + Guid.NewGuid().ToString("N") : "Local\\AlfaRaceX.Desktop",
+            out bool ownsInstance);
+        if (!ownsInstance)
         {
-            window.ShowInTaskbar = false;
-            window.WindowStartupLocation = WindowStartupLocation.Manual;
-            window.Left = -20000;
-            window.Loaded += async (_, _) => app.Shutdown(await SmokeTest.RunUiAsync(window));
+            MessageBox.Show("AlfaRaceX Desktop è già aperto in questa sessione.", "AlfaRaceX");
+            return 3;
         }
-        return app.Run(window);
+        try
+        {
+            DesktopPaths.Ensure();
+            var app = new App();
+            app.InitializeComponent();
+            if (uiSmoke) SmokeTest.SeedInterruptedOperation();
+            var window = new MainWindow();
+            if (uiSmoke)
+            {
+                window.ShowInTaskbar = false;
+                window.WindowStartupLocation = WindowStartupLocation.Manual;
+                window.Left = -20000;
+                window.Loaded += async (_, _) => app.Shutdown(await SmokeTest.RunUiAsync(window));
+            }
+            return app.Run(window);
+        }
+        finally { instance.ReleaseMutex(); }
     }
 }
