@@ -5,23 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AlfaRaceX</title>
   <link rel="stylesheet" href="vendor/bootstrap/css/bootstrap.min.css">
+  <link rel="stylesheet" href="vendor/bootstrap-icons/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
 <div id="shell">
   <aside class="sidebar">
     <div class="brand">
-      <img src="img/arx.svg" alt="ARX">
-      <div><strong>AlfaRaceX</strong><span>DESKTOP</span></div>
+      <img src="img/brand.svg" alt="ARX">
+      <div><strong>AlfaRaceX Updater</strong><span id="sideVersion">—</span></div>
     </div>
     <nav id="nav">
-      <button class="nav-item active" data-page="dashboard"><span>◈</span> Dashboard</button>
-      <button class="nav-item" data-page="update"><span>⇧</span> Aggiornamento</button>
-      <button class="nav-item" data-page="backup"><span>▣</span> Backup</button>
-      <button class="nav-item" data-page="restore"><span>↺</span> Ripristino</button>
-      <button class="nav-item" data-page="logs"><span>≡</span> Log</button>
-      <button class="nav-item" data-page="info"><span>ⓘ</span> Informazioni</button>
+      <button class="nav-item active" data-page="dashboard"><i class="bi bi-house-door-fill" aria-hidden="true"></i><span>Dashboard<small>Panoramica e stato sistema</small></span></button>
+      <button class="nav-item" data-page="update"><i class="bi bi-download" aria-hidden="true"></i><span>Aggiornamento<small>Verifica e installa firmware</small></span></button>
+      <button class="nav-item" data-page="backup"><i class="bi bi-database-fill" aria-hidden="true"></i><span>Backup<small>Salva firmware originali</small></span></button>
+      <button class="nav-item" data-page="restore"><i class="bi bi-clock-history" aria-hidden="true"></i><span>Ripristino<small>Ripristina firmware</small></span></button>
+      <button class="nav-item" data-page="logs"><i class="bi bi-list-ul" aria-hidden="true"></i><span>Log<small>Visualizza operazioni</small></span></button>
+      <button class="nav-item" data-page="info"><i class="bi bi-info-circle-fill" aria-hidden="true"></i><span>Informazioni<small>Versione e condizioni d’uso</small></span></button>
     </nav>
+    <img class="alfa-mark" src="img/alfa.svg" alt="Alfa Romeo">
     <div class="sidebar-footer">
       <div class="status-dot" id="sideStatusDot"></div>
       <div><small>DFU</small><strong id="sideStatus">Non rilevato</strong></div>
@@ -41,32 +43,14 @@
     </header>
 
     <section class="page active" id="page-dashboard">
-      <div class="hero-card">
-        <div class="hero-overlay"></div>
-        <div class="hero-content">
-          <div class="kicker">ALFA ROMEO GIULIA / STELVIO</div>
-          <h2>Controllo firmware.<br><span>Backup sicuri.</span></h2>
-          <p>Gestisci i tre moduli AlfaRaceX da un’unica applicazione installata sul PC.</p>
-          <button class="btn-arx" data-go="update">Gestisci firmware</button>
-        </div>
+      <div class="reference-hero">
+        <div class="connection-line"><span class="status-dot" id="connectionDot"></span><div><strong id="connectionTitle">Dispositivo non rilevato</strong><small id="metricDeviceHint">Collega un solo modulo in DFU</small></div><div class="version-cell">Versione updater<strong id="metricApp">—</strong></div><div class="version-cell">Ultima verifica<strong id="lastCheck">—</strong></div></div>
+        <section class="system-panel panel"><h3>Stato sistema</h3><div class="system-body"><div class="connection-state"><i class="bi bi-usb-symbol"></i><strong id="metricDevice">Non rilevato</strong><small>Stato comunicazione DFU</small></div><dl><dt>Framework disponibile:</dt><dd id="metricFirmware">—</dd><dt>Canale:</dt><dd id="metricChannel">—</dd><dt>Backup catalogati:</dt><dd id="metricBackups">0</dd><dt>Dati locali:</dt><dd><button id="openDataBtn" class="mini-btn" title="Apri cartella dati"><i class="bi bi-folder2-open"></i> Apri cartella</button></dd></dl></div><span id="dataRoot" hidden></span></section>
       </div>
-
-      <div class="metric-grid">
-        <article class="metric"><span>Firmware</span><strong id="metricFirmware">—</strong><small id="metricChannel">Release Candidate</small></article>
-        <article class="metric"><span>Dispositivo DFU</span><strong id="metricDevice">Non rilevato</strong><small id="metricDeviceHint">Collega un solo modulo</small></article>
-        <article class="metric"><span>Backup catalogati</span><strong id="metricBackups">0</strong><small>SQLite locale</small></article>
-        <article class="metric"><span>Desktop</span><strong id="metricApp">—</strong><small>Windows x64</small></article>
-      </div>
-
-      <div class="panel-grid two">
-        <section class="panel">
-          <div class="panel-head"><div><span class="section-tag">STATO</span><h3>Workflow consigliato</h3></div></div>
-          <div class="steps">
-            <div><b>01</b><span><strong>Backup</strong><small>Salva il contenuto originale prima di ogni modifica.</small></span></div>
-            <div><b>02</b><span><strong>Verifica firmware</strong><small>Download e SHA-256 dei tre moduli.</small></span></div>
-            <div><b>03</b><span><strong>Programmazione</strong><small>Un modulo alla volta in DFU con verifica finale.</small></span></div>
-          </div>
-        </section>
+      <div class="dashboard-actions"><button class="btn-arx ghost" id="checkDashboard"><i class="bi bi-arrow-repeat"></i><span>Verifica aggiornamenti<small>Controlla le versioni dal repository</small></span></button><button class="btn-arx ghost" id="downloadDashboard"><i class="bi bi-download"></i><span>Scarica firmware<small>Download e verifica SHA-256</small></span></button><button class="btn-arx" data-go="update"><i class="bi bi-gear-fill"></i><span>Installa aggiornamento<small>Seleziona e conferma il modulo</small></span></button></div>
+      <section class="panel module-panel"><h3>Moduli firmware</h3><div id="dashboardTargets"><p class="muted">Accetta le condizioni per verificare il repository.</p></div></section>
+      <section class="panel dashboard-log"><div class="panel-head"><h3>Log operazioni</h3><button class="mini-btn" data-go="logs">Apri log</button></div><div id="dashboardLogs"></div></section>
+    </section>
         <section class="panel">
           <div class="panel-head"><div><span class="section-tag">SICUREZZA</span><h3>Dati persistenti</h3></div></div>
           <p class="muted">Backup, cronologia e database restano separati dalla cartella di installazione e non vengono persi con gli aggiornamenti dell’app.</p>
@@ -82,11 +66,6 @@
         <button class="btn-arx" id="prepareBtn">Scarica e verifica</button>
       </div>
       <div class="target-grid" id="targets"></div>
-      <div class="operation-card" id="operationCard">
-        <div class="operation-row"><span id="operationText">Nessuna operazione in corso.</span><strong id="operationPercent">0%</strong></div>
-        <div class="progress-track"><div class="progress-fill" id="operationProgress"></div></div>
-        <button class="btn-link-danger" id="cancelBtn" hidden>Annulla operazione</button>
-      </div>
     </section>
 
     <section class="page" id="page-backup">
@@ -117,7 +96,7 @@
     <section class="page" id="page-logs">
       <div class="section-intro">
         <div><span class="section-tag">DIAGNOSTICA</span><h2>Log e cronologia</h2><p>Eventi applicativi, operazioni DFU, backup, ripristini ed errori in un’unica cronologia persistente.</p></div>
-        <button class="btn-arx ghost" id="clearLogsBtn">Pulisci cronologia</button>
+        <button class="mini-btn" id="copyLogsBtn">Copia</button><button class="mini-btn" id="exportLogsBtn">Esporta</button><button class="mini-btn" id="openLogsBtn">Cartella log</button><button class="btn-arx ghost" id="clearLogsBtn">Pulisci cronologia</button>
       </div>
       <section class="panel log-panel"><div id="logList" class="log-list"></div></section>
     </section>
@@ -125,7 +104,7 @@
     <section class="page" id="page-info">
       <div class="section-intro"><div><span class="section-tag">PRODOTTO</span><h2>Informazioni</h2><p>AlfaRaceX Desktop è la shell ufficiale Windows per gestione firmware, backup, ripristino e log.</p></div></div>
       <div class="panel-grid two">
-        <section class="panel info-card"><img src="img/arx.svg" alt="ARX"><div><h3>AlfaRaceX Desktop <span id="infoVersion">—</span></h3><p>.NET 8 / WPF / WebView2 / SQLite / Velopack</p><button class="btn-arx ghost" id="repoBtn">Repository GitHub</button></div></section>
+        <section class="panel info-card"><img src="img/brand.svg" alt="ARX"><div><h3>AlfaRaceX Desktop <span id="infoVersion">—</span></h3><p>.NET 8 / WPF / WebView2 / SQLite / Inno Setup</p><button class="btn-arx ghost" id="repoBtn">Repository GitHub</button></div></section>
         <section class="panel"><h3>Percorsi locali</h3><dl class="info-list"><dt>Dati</dt><dd id="infoData">—</dd><dt>Backup</dt><dd id="infoBackup">—</dd><dt>Database</dt><dd id="infoDb">—</dd></dl></section>
       </div>
       <section class="panel mt-4"><h3>Nota importante / Important notice</h3><p class="muted">AlfaRaceX è un progetto indipendente di ricerca, studio e sperimentazione. Non è un prodotto automotive certificato o omologato e non è affiliato né approvato da Alfa Romeo o Stellantis. / AlfaRaceX is an independent research, study and experimental project. It is not a certified or road-approved automotive product and is not affiliated with or endorsed by Alfa Romeo or Stellantis.</p></section>
@@ -150,16 +129,21 @@
         </div>
       </section>
     </section>
+      <div class="operation-card" id="operationCard">
+        <h3>Avanzamento operazione</h3><div class="operation-stages"><span>① Verifica</span><span>② Download</span><span>③ Backup</span><span>④ Installazione</span><span>⑤ Verifica finale</span></div><div class="operation-row"><span id="operationText">Nessuna operazione in corso.</span><strong id="operationPercent">0%</strong></div>
+        <div class="progress-track"><div class="progress-fill" id="operationProgress"></div></div>
+        <button class="btn-link-danger" id="cancelBtn" hidden>Annulla operazione</button>
+      </div>
   </main>
 </div>
 
-<div id="disclaimerGate" class="disclaimer-gate" hidden>
+<div id="disclaimerGate" class="disclaimer-gate">
   <div class="disclaimer-dialog" role="dialog" aria-modal="true" aria-labelledby="disclaimerTitle">
     <div class="disclaimer-dialog-head">
       <div><span class="section-tag">FIRST RUN / PRIMO AVVIO</span><h2 id="disclaimerTitle">Avvertenze di sicurezza / Safety notice</h2></div>
-      <img src="img/arx.svg" alt="ARX">
+      <img src="img/brand.svg" alt="ARX">
     </div>
-    <div class="disclaimer-scroll">
+    <div class="disclaimer-scroll" id="legalText"><p>Caricamento delle condizioni locali…</p><!--
       <section>
         <h3>Italiano</h3>
         <p>AlfaRaceX è un progetto indipendente, gratuito e open source destinato a studio, ricerca, sperimentazione e condivisione della conoscenza. Non è un prodotto automotive certificato, omologato o approvato per l'uso su strada.</p>
@@ -175,9 +159,9 @@
         <p>By using AlfaRaceX you accept responsibility for the configurations you apply and for compliance with applicable law, homologation, warranty and insurance requirements. To the extent permitted by law, authors and contributors accept no liability for damage arising from use of the software.</p>
       </section>
     </div>
-    <div class="disclaimer-actions">
+    --></div><div class="disclaimer-actions">
       <button class="btn-arx ghost" id="disclaimerExitBtn">Esci / Exit</button>
-      <button class="btn-arx" id="disclaimerAcceptBtn">Accetto / I Accept</button>
+      <button class="btn-arx" id="disclaimerAcceptBtn" disabled>Accetto / I Accept</button>
     </div>
   </div>
 </div>

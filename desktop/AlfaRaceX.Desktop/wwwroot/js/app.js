@@ -3,7 +3,11 @@
   const state = { page: 'dashboard', backupRole: 'BH', busy: false, appInfo: {}, backups: [], disclaimerAccepted: false };
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const host = (action, payload = {}) => window.chrome.webview.postMessage({ action, payload });
+  const bridge = window.chrome?.webview;
+  const host = (action, payload = {}) => {
+    if (!bridge) { $('legalText').textContent = 'Il collegamento con l’app Windows non è disponibile. Riavvia AlfaRaceX.'; return; }
+    bridge.postMessage({ action, payload });
+  };
 
   function showPage(name) {
     state.page = name;
@@ -34,9 +38,15 @@
     $('metricDevice').textContent = connected ? 'Rilevato' : (Number(d.dfuCount) > 1 ? `${d.dfuCount} rilevati` : 'Non rilevato');
     $('sideStatus').textContent = connected ? 'Modulo rilevato' : (Number(d.dfuCount) > 1 ? 'Più moduli' : 'Non rilevato');
     $('sideStatusDot').classList.toggle('ok', connected);
+    $('connectionDot').classList.toggle('ok', connected);
+    $('connectionTitle').textContent = connected ? 'Dispositivo DFU rilevato' : 'Dispositivo non rilevato';
+    $('lastCheck').textContent = d.lastCheckUtc ? new Date(d.lastCheckUtc).toLocaleString('it-IT') : '—';
   }
 
   function renderManifest(m) {
+    state.manifest = m;
+    $('dashboardTargets').innerHTML = (m.targets || []).map(t => `<div class="module-row"><div class="module-badge ${esc(t.id)}">${esc(t.id)}<small>${esc(t.id === 'BH' ? 'Body Hub' : t.id === 'C1' ? 'CAN 1' : 'CAN 2')}</small></div><div><small>Versione sul dispositivo</small><span>Non interrogabile in DFU</span></div><div><small>Versione disponibile</small><span>${esc(m.version)}</span></div><div class="hash-cell"><small>Checksum (SHA-256)</small><span title="${esc(t.sha256)}">${esc(t.sha256.slice(0,8))}…${esc(t.sha256.slice(-4))}</span></div><div class="module-status ${t.prepared ? 'ready' : ''}"><small>Stato pacchetto</small>${t.prepared ? '● Verificato' : '● Da scaricare'}</div><button class="mini-btn" data-target="${esc(t.id)}">Dettagli</button></div>`).join('');
+    document.querySelectorAll('[data-target]').forEach(b => b.onclick = () => showPage('update'));
     $('firmwareBadge').textContent = `Firmware ${m.version}`;
     $('targets').innerHTML = (m.targets || []).map(t => `
       <article class="target-card ${t.prepared ? 'prepared' : ''}">
@@ -74,25 +84,34 @@
   }
 
   function renderLogs(items) {
+    state.logs = items || [];
     $('logList').innerHTML = (items || []).map(x => `<div class="log-row ${esc(x.level)}"><span class="ts">${esc(new Date(x.createdUtc).toLocaleString('it-IT'))}</span><span class="lvl">${esc(x.level)}</span><span class="cat">${esc(x.category)}</span><span>${esc(x.message)}</span></div>`).join('');
   }
 
   function setBusy(value) {
     state.busy = !!value;
     $('prepareBtn').disabled = state.busy;
+    $('downloadDashboard').disabled = state.busy;
+    $('checkDashboard').disabled = state.busy;
+    $('refreshBtn').disabled = state.busy;
     $('backupBtn').disabled = state.busy;
     $('importBtn').disabled = state.busy;
     $('cancelBtn').hidden = !state.busy;
-    document.querySelectorAll('.flash-btn,.restore').forEach(b => { if (state.busy) b.disabled = true; });
+    if (state.manifest) renderManifest(state.manifest);
+    renderBackups(state.backups);
   }
 
-  window.chrome.webview.addEventListener('message', ev => {
+  bridge?.addEventListener('message', ev => {
     const msg = ev.data || {};
     const d = msg.data;
     switch (msg.type) {
       case 'appInfo':
         state.appInfo = d;
         state.disclaimerAccepted = !!d.disclaimerAccepted;
+        $('sideVersion').textContent = `v${d.appVersion}`;
+        $('legalText').textContent = d.disclaimerText || 'Condizioni non disponibili';
+        $('disclaimerAcceptBtn').disabled = !d.disclaimerText;
+        $('shell').inert = !state.disclaimerAccepted;
         $('infoVersion').textContent = `v${d.appVersion}`;
         $('infoData').textContent = d.dataRoot;
         $('infoBackup').textContent = d.backupRoot;
@@ -101,6 +120,7 @@
         break;
       case 'disclaimerAccepted':
         state.disclaimerAccepted = true;
+        $('shell').inert = false;
         $('disclaimerGate').hidden = true;
         toast('Disclaimer registrato. / Disclaimer accepted.', 'AlfaRaceX');
         break;
@@ -108,8 +128,8 @@
       case 'manifest': renderManifest(d); break;
       case 'manifestError': toast(`Manifest firmware non disponibile: ${d.message}`, 'Connessione'); break;
       case 'backups': renderBackups(d); break;
-      case 'logs': renderLogs(d); break;
-      case 'log': if (state.page === 'logs') host('getLogs'); break;
+      case 'logs': renderLogs(d); $('dashboardLogs').innerHTML = $('logList').innerHTML; break;
+      case 'log': renderLogs([d, ...(state.logs || [])].slice(0,500)); $('dashboardLogs').innerHTML = $('logList').innerHTML; break;
       case 'busy': setBusy(d.value); break;
       case 'operationProgress':
         $('operationText').textContent = d.message || 'Operazione in corso…';
@@ -123,8 +143,8 @@
         toast(d.message || 'Operazione completata.', 'Completato');
         host('refreshDashboard');
         break;
-      case 'operationFailed': toast(d.message || 'Operazione fallita.', 'Errore'); break;
-      case 'operationCancelled': toast('Operazione annullata.', 'AlfaRaceX'); break;
+      case 'operationFailed': $('operationText').textContent = 'Operazione fallita: ' + d.message; toast(d.message || 'Operazione fallita.', 'Errore'); break;
+      case 'operationCancelled': $('operationText').textContent = 'Operazione annullata; verifica lo stato del modulo prima di scollegarlo.'; toast('Operazione annullata.', 'AlfaRaceX'); break;
       case 'error': toast(d.message || 'Errore imprevisto.', 'Errore'); break;
     }
   });
@@ -151,5 +171,11 @@
   $('disclaimerAcceptBtn').addEventListener('click', () => host('acceptDisclaimer'));
   $('disclaimerExitBtn').addEventListener('click', () => host('exitApplication'));
 
+  $('checkDashboard').onclick = () => { host('refreshDashboard'); host('loadManifest'); };
+  $('downloadDashboard').onclick = () => host('prepareUpdate');
+  $('copyLogsBtn').onclick = () => host('copyLogs');
+  $('exportLogsBtn').onclick = () => host('exportLogs');
+  $('openLogsBtn').onclick = () => host('openLogFolder');
+  $('shell').inert = true;
   host('initialize');
 })();

@@ -30,3 +30,11 @@ Thumbs.db
 __pycache__/
 *.pyc
 .venv/
+
+# Desktop dependencies/build outputs
+**/node_modules/
+**/bin/
+**/obj/
+desktop/AlfaRaceX.Desktop/wwwroot/vendor/
+/publish/
+/artifacts/
