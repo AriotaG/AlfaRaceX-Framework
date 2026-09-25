@@ -9,6 +9,16 @@
     bridge.postMessage({ action, payload });
   };
 
+  function renderLegal(text, version, acceptedUtc) {
+    const blocks = String(text || 'Condizioni non disponibili').split(/\n\s*\n/);
+    const body = blocks.map(block => {
+      const heading = block.match(/^#{1,3}\s+(.+)/);
+      const safe = esc(heading ? heading[1] : block.replace(/^>\s?/gm, '')).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      return heading ? `<h3>${safe}</h3>` : `<p>${safe.replace(/\n/g, '<br>')}</p>`;
+    }).join('');
+    return `${body}<p class="legal-version">Versione del testo (SHA-256): ${esc(version || '—')}<br>Accettazione: ${acceptedUtc ? esc(new Date(acceptedUtc).toLocaleString('it-IT')) : 'Da accettare'}</p>`;
+  }
+
   function showPage(name) {
     state.page = name;
     if (name === 'dashboard') document.querySelector('.dashboard-log').before($('operationCard'));
@@ -118,7 +128,7 @@
         state.appInfo = d;
         state.disclaimerAccepted = !!d.disclaimerAccepted;
         $('sideVersion').textContent = `v${d.appVersion}`;
-        $('legalText').textContent = d.disclaimerText || 'Condizioni non disponibili';
+        $('legalText').innerHTML = renderLegal(d.disclaimerText, d.disclaimerVersion, d.disclaimerAcceptedUtc);
         $('disclaimerAcceptBtn').disabled = !d.disclaimerText;
         $('shell').inert = !state.disclaimerAccepted;
         $('infoVersion').textContent = `v${d.appVersion}`;

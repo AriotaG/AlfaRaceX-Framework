@@ -3,6 +3,8 @@ using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Windows;
@@ -25,6 +27,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        SourceInitialized += (_, _) =>
+        {
+            int dark = 1;
+            DwmSetWindowAttribute(new WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int));
+        };
         DesktopPaths.Ensure();
         _history.Initialize();
         _history.AddEvent("INFO", "APP", $"Avvio AlfaRaceX Desktop {AppVersion}.");
@@ -45,6 +52,9 @@ public partial class MainWindow : Window
             }
         };
     }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
 
     private static string AppVersion =>
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
