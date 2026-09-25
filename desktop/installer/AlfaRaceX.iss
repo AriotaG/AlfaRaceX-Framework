@@ -39,10 +39,10 @@ Name: "{autodesktop}\AlfaRaceX"; Filename: "{app}\AlfaRaceX.exe"; Tasks: desktop
 Filename: "{app}\AlfaRaceX.exe"; Description: "Avvia AlfaRaceX"; Flags: nowait postinstall skipifsilent runasoriginaluser
 [Code]
 function PrepareToInstall(var NeedsRestart: Boolean): String;
-var InstalledVersion: String;
+var InstalledVersion, NewVersion: Int64;
 begin
   Result := '';
-  if GetVersionNumbersString(ExpandConstant('{app}\AlfaRaceX.exe'), InstalledVersion) then
-    if ComparePackedVersion(StrToVersion(InstalledVersion), StrToVersion('{#AppVersion}')) > 0 then
+  if GetPackedVersion(ExpandConstant('{app}\AlfaRaceX.exe'), InstalledVersion) and StrToVersion('{#AppVersion}', NewVersion) then
+    if ComparePackedVersion(InstalledVersion, NewVersion) > 0 then
       Result := 'Una versione più recente è già installata. Disinstallarla prima del downgrade. Backup e log rimangono conservati.';
 end;

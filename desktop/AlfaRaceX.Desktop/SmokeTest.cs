@@ -4,16 +4,25 @@ internal static class SmokeTest
 {
     public static int Run()
     {
+        string root = Path.Combine(Path.GetTempPath(), "AlfaRaceX-Smoke", Guid.NewGuid().ToString("N"));
         try
         {
-            DesktopPaths.Ensure();
-            var repository = new HistoryRepository(DesktopPaths.Database);
+            Directory.CreateDirectory(root);
+            foreach (string relative in new[] { "DISCLAIMER.md", "wwwroot/index.html", "wwwroot/js/app.js", "wwwroot/css/app.css", "wwwroot/img/brand.svg", "wwwroot/img/cars.svg", "wwwroot/img/alfa.svg", "wwwroot/vendor/bootstrap/css/bootstrap.min.css", "wwwroot/vendor/bootstrap-icons/font/bootstrap-icons.min.css" })
+                if (!File.Exists(Path.Combine(AppContext.BaseDirectory, relative))) throw new FileNotFoundException("Missing packaged asset", relative);
+            var repository = new HistoryRepository(Path.Combine(root, "test.db"));
             repository.Initialize();
-            repository.AddEvent("INFO", "SMOKE", "AlfaRaceX Desktop smoke test completato.");
-
-            if (!File.Exists(DesktopPaths.Database))
-                throw new InvalidOperationException("Database SQLite non creato.");
-
+            repository.SetSetting("DisclaimerVersion", "test-v1");
+            repository.SetSetting("DisclaimerAcceptedUtc", DateTime.UtcNow.ToString("O"));
+            if (repository.GetSetting("DisclaimerVersion") != "test-v1") throw new InvalidOperationException("Disclaimer persistence failed.");
+            repository.SetSetting("DisclaimerVersion", "test-v2");
+            if (repository.GetSetting("DisclaimerVersion") != "test-v2") throw new InvalidOperationException("Disclaimer version update failed.");
+            repository.AddBackup("BH", Path.Combine(root,"test.bin"), "", new string('a',64), 131072, DateTime.UtcNow, "smoke");
+            if (repository.CountBackups() != 1 || repository.GetBackups()[0].Role != "BH") throw new InvalidOperationException("Backup catalog failed.");
+            repository.AddEvent("ERROR", "SMOKE", "Synthetic test error");
+            if (repository.GetEvents()[0].Message != "Synthetic test error") throw new InvalidOperationException("Event persistence failed.");
+            repository.ClearEvents();
+            if (repository.GetEvents().Count != 0) throw new InvalidOperationException("Clear logs failed.");
             Console.WriteLine("ALFARACEX_SMOKE_OK");
             return 0;
         }
@@ -21,6 +30,11 @@ internal static class SmokeTest
         {
             Console.Error.WriteLine(ex);
             return 2;
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }
 }

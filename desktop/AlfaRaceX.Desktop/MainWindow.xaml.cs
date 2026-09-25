@@ -226,7 +226,7 @@ public partial class MainWindow : Window
 
     private async Task SendManifestAsync(bool force)
     {
-        if (_operation is not null) throw new InvalidOperationException("Attendi la fine dell’operazione prima di cambiare manifest.");
+        if (force && _operation is not null) throw new InvalidOperationException("Attendi la fine dell’operazione prima di cambiare manifest.");
         try
         {
             if (_manifest is null || force)

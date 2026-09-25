@@ -11,12 +11,14 @@
 
   function showPage(name) {
     state.page = name;
+    if (name === 'dashboard') document.querySelector('.dashboard-log').before($('operationCard'));
+    else $('page-' + name).append($('operationCard'));
     document.querySelectorAll('.page').forEach(x => x.classList.toggle('active', x.id === `page-${name}`));
     document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.dataset.page === name));
     const titles = { dashboard:'Dashboard', update:'Aggiornamento', backup:'Backup', restore:'Ripristino', logs:'Log', info:'Informazioni' };
     $('pageTitle').textContent = titles[name] || 'AlfaRaceX';
-    if (name === 'restore') host('listBackups');
-    if (name === 'logs') host('getLogs');
+    if (state.disclaimerAccepted && name === 'restore') host('listBackups');
+    if (state.disclaimerAccepted && name === 'logs') host('getLogs');
   }
 
   function toast(text, title = 'AlfaRaceX') {
@@ -45,6 +47,7 @@
 
   function renderManifest(m) {
     state.manifest = m;
+    $('releaseCatalog').textContent = (m.releases || []).join(' · ') || 'Catalogo non disponibile';
     $('dashboardTargets').innerHTML = (m.targets || []).map(t => `<div class="module-row"><div class="module-badge ${esc(t.id)}">${esc(t.id)}<small>${esc(t.id === 'BH' ? 'Body Hub' : t.id === 'C1' ? 'CAN 1' : 'CAN 2')}</small></div><div><small>Versione sul dispositivo</small><span>Non interrogabile in DFU</span></div><div><small>Versione disponibile</small><span>${esc(m.version)}</span></div><div class="hash-cell"><small>Checksum (SHA-256)</small><span title="${esc(t.sha256)}">${esc(t.sha256.slice(0,8))}…${esc(t.sha256.slice(-4))}</span></div><div class="module-status ${t.prepared ? 'ready' : ''}"><small>Stato pacchetto</small>${t.prepared ? '● Verificato' : '● Da scaricare'}</div><button class="mini-btn" data-target="${esc(t.id)}">Dettagli</button></div>`).join('');
     document.querySelectorAll('[data-target]').forEach(b => b.onclick = () => showPage('update'));
     $('firmwareBadge').textContent = `Firmware ${m.version}`;
@@ -177,5 +180,6 @@
   $('exportLogsBtn').onclick = () => host('exportLogs');
   $('openLogsBtn').onclick = () => host('openLogFolder');
   $('shell').inert = true;
+  showPage('dashboard');
   host('initialize');
 })();

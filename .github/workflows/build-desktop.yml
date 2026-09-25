@@ -53,6 +53,9 @@ jobs:
           Copy-Item node_modules/bootstrap/dist/js/bootstrap.bundle.min.js wwwroot/vendor/bootstrap/js/bootstrap.bundle.min.js -Force
           Copy-Item node_modules/bootstrap-icons wwwroot/vendor/bootstrap-icons -Recurse -Force
 
+      - name: UI behavior regression tests
+        run: node desktop/tests/ui.test.cjs
+
       - name: Restore and build
         run: |
           dotnet restore desktop/AlfaRaceX.Desktop/AlfaRaceX.Desktop.csproj
