@@ -6,7 +6,7 @@ internal static class NetworkValidation
 {
     public static async Task<int> RunAsync()
     {
-        DesktopPaths.ValidationRoot = Path.Combine(Path.GetTempPath(), "AlfaRaceX-Network-Test");
+        DesktopPaths.ValidationRoot = Environment.GetEnvironmentVariable("ALFARACEX_NETWORK_TEST_ROOT") ?? Path.Combine(Path.GetTempPath(), "AlfaRaceX-Network-Test");
         DesktopPaths.Ensure();
         try
         {

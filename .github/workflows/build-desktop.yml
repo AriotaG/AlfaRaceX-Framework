@@ -71,10 +71,14 @@ jobs:
           if ($proc.ExitCode -ne 0) { throw "Published executable smoke test failed with code $($proc.ExitCode)." }
 
       - name: Validate real firmware downloads and error handling
+        env:
+          ALFARACEX_NETWORK_TEST_ROOT: ${{ runner.temp }}/AlfaRaceX-Network-Test
         run: |
           $p = Start-Process .\publish\AlfaRaceX.exe -ArgumentList '--network-validation' -PassThru
           if (-not $p.WaitForExit(240000)) { $p.Kill(); throw 'Network test timed out' }
-          if ($p.ExitCode -ne 0) { throw 'Network validation failed' }
+          $p.Refresh()
+          Get-Content "$env:ALFARACEX_NETWORK_TEST_ROOT/network-validation.json"
+          if ($p.ExitCode -ne 0) { throw "Network validation failed: $($p.ExitCode)" }
 
       - name: Validate real WPF and WebView2 first and subsequent launch
         env:
