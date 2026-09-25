@@ -14,9 +14,9 @@ internal static class UiValidation
     {
         Directory.CreateDirectory(Output);
         var checks = new List<string>();
-        async Task Check(string name, string expression)
+        async Task Check(string name, string expression, int attempts = 100)
         {
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < attempts; i++)
             {
                 if (await web.ExecuteScriptAsync(expression) == "true") { checks.Add(name); return; }
                 await Task.Delay(100);
@@ -40,7 +40,7 @@ internal static class UiValidation
             }
             await Check("Accepted disclaimer persisted and operational UI unlocked", "document.getElementById('disclaimerGate').hidden && !document.getElementById('shell').inert");
             // This observes the real backend response; no device or firmware status is injected.
-            await Check("Real GitHub manifest loaded", "document.querySelectorAll('.module-row').length === 3");
+            await Check("Real GitHub manifest loaded", "document.querySelectorAll('.module-row').length === 3", 600);
             foreach (string page in new[] { "update", "backup", "restore", "logs", "info", "dashboard" })
             {
                 await web.ExecuteScriptAsync($"document.querySelector('[data-page={page}]').click()");

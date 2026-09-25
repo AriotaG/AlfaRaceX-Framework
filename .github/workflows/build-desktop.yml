@@ -70,6 +70,12 @@ jobs:
           $proc = Start-Process -FilePath ".\publish\AlfaRaceX.exe" -ArgumentList "--smoke-test" -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw "Published executable smoke test failed with code $($proc.ExitCode)." }
 
+      - name: Validate real firmware downloads and error handling
+        run: |
+          $p = Start-Process .\publish\AlfaRaceX.exe -ArgumentList '--network-validation' -PassThru
+          if (-not $p.WaitForExit(240000)) { $p.Kill(); throw 'Network test timed out' }
+          if ($p.ExitCode -ne 0) { throw 'Network validation failed' }
+
       - name: Validate real WPF and WebView2 first and subsequent launch
         env:
           ALFARACEX_UI_TEST_ROOT: ${{ runner.temp }}/AlfaRaceX-UI-Test
@@ -85,7 +91,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AlfaRaceX-UI-Validation
-          path: ${{ runner.temp }}/AlfaRaceX-UI-Test/validation/*
+          path: |
+            ${{ runner.temp }}/AlfaRaceX-UI-Test/validation/*
+            ${{ runner.temp }}/AlfaRaceX-Network-Test/network-validation.json
           if-no-files-found: warn
 
       - name: Create Inno Setup installer

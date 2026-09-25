@@ -13,6 +13,7 @@ public partial class App : Application
         if (args.Any(a => string.Equals(a, "--smoke-test", StringComparison.OrdinalIgnoreCase)))
             return SmokeTest.Run();
 
+        if (args.Contains("--network-validation")) return NetworkValidation.RunAsync().GetAwaiter().GetResult();
         if (args.Contains("--ui-validation"))
         {
             UiValidation.Enabled = true;
@@ -23,7 +24,6 @@ public partial class App : Application
         DesktopPaths.Ensure();
         var app = new App();
         app.InitializeComponent();
-        app.Run(new MainWindow());
-        return 0;
+        return app.Run(new MainWindow());
     }
 }

@@ -6,9 +6,13 @@ namespace AlfaRaceX.Desktop;
 
 internal sealed class DesktopUpdateCoordinator
 {
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(45) };
+    private readonly HttpClient _http;
     public IReadOnlyList<string> Releases { get; private set; } = Array.Empty<string>();
-    public DesktopUpdateCoordinator() => _http.DefaultRequestHeaders.UserAgent.ParseAdd("AlfaRaceX-Desktop/0.2.0");
+    public DesktopUpdateCoordinator(HttpClient? http = null)
+    {
+        _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(45) };
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("AlfaRaceX-Desktop/0.2.0");
+    }
 
     public async Task<UpdateManifest> LoadManifestAsync(CancellationToken ct)
     {

@@ -80,7 +80,14 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            _history.AddEvent("ERROR", "UI", ex.Message);
+            _history.AddEvent("ERROR", "UI", ex.ToString());
+            if (UiValidation.Enabled)
+            {
+                Directory.CreateDirectory(UiValidation.Output);
+                File.WriteAllText(Path.Combine(UiValidation.Output, "startup-error.txt"), ex.ToString());
+                Application.Current.Shutdown(3);
+                return;
+            }
             MessageBox.Show(
                 "Impossibile avviare l'interfaccia AlfaRaceX.\n\n" + ex.Message,
                 "AlfaRaceX",
