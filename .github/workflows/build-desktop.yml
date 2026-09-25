@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - desktop-v1
+      - work/desktop-production-ui
     paths:
       - "desktop/**"
       - "updater/AlfaRaceX.Updater/**"
@@ -45,11 +46,12 @@ jobs:
       - name: Vendor local Bootstrap assets
         working-directory: desktop/AlfaRaceX.Desktop
         run: |
-          npm install --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
           New-Item -ItemType Directory -Force -Path wwwroot/vendor/bootstrap/css | Out-Null
           New-Item -ItemType Directory -Force -Path wwwroot/vendor/bootstrap/js | Out-Null
           Copy-Item node_modules/bootstrap/dist/css/bootstrap.min.css wwwroot/vendor/bootstrap/css/bootstrap.min.css -Force
           Copy-Item node_modules/bootstrap/dist/js/bootstrap.bundle.min.js wwwroot/vendor/bootstrap/js/bootstrap.bundle.min.js -Force
+          Copy-Item node_modules/bootstrap-icons wwwroot/vendor/bootstrap-icons -Recurse -Force
 
       - name: Restore and build
         run: |
@@ -65,29 +67,33 @@ jobs:
           $proc = Start-Process -FilePath ".\publish\AlfaRaceX.exe" -ArgumentList "--smoke-test" -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw "Published executable smoke test failed with code $($proc.ExitCode)." }
 
-      - name: Install Velopack CLI
-        run: dotnet tool install -g vpk --version 1.2.0
-
-      - name: Create Velopack installer
+      - name: Create Inno Setup installer
         run: |
-          vpk pack --packId AlfaRaceX.Desktop --packVersion 0.1.0 --packDir publish --mainExe AlfaRaceX.exe --packTitle AlfaRaceX
-          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          $setup = Get-ChildItem Releases -Filter "*Setup.exe" | Select-Object -First 1
-          if (-not $setup) { throw "Velopack Setup.exe not found." }
-          Copy-Item $setup.FullName artifacts/AlfaRaceX-Setup.exe -Force
+          [xml]$project = Get-Content desktop/AlfaRaceX.Desktop/AlfaRaceX.Desktop.csproj
+          $version = [string]$project.Project.PropertyGroup.Version
+          & "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe" "/DAppVersion=$version" desktop/installer/AlfaRaceX.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
           $hash = (Get-FileHash artifacts/AlfaRaceX-Setup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  AlfaRaceX-Setup.exe" | Out-File -Encoding ascii artifacts/AlfaRaceX-Setup.sha256
 
-      - name: Install generated Setup and smoke test installed app
+      - name: Install, upgrade, uninstall and reinstall with persistence
         run: |
           $installRoot = Join-Path $env:RUNNER_TEMP "AlfaRaceX-Installed"
-          if (Test-Path $installRoot) { Remove-Item $installRoot -Recurse -Force }
-          $setupProc = Start-Process -FilePath ".\artifacts\AlfaRaceX-Setup.exe" -ArgumentList @("--silent","--installto",$installRoot) -Wait -PassThru
-          if ($setupProc.ExitCode -ne 0) { throw "Installer returned exit code $($setupProc.ExitCode)." }
-          $exe = Get-ChildItem $installRoot -Recurse -Filter "AlfaRaceX.exe" | Select-Object -First 1
-          if (-not $exe) { throw "Installed AlfaRaceX.exe not found." }
-          $smokeProc = Start-Process -FilePath $exe.FullName -ArgumentList "--smoke-test" -Wait -PassThru
-          if ($smokeProc.ExitCode -ne 0) { throw "Installed executable smoke test failed with code $($smokeProc.ExitCode)." }
+          $sentinel = Join-Path $env:LOCALAPPDATA "AlfaRaceX/Desktop/persistence-check.txt"
+          New-Item -ItemType Directory -Force (Split-Path $sentinel) | Out-Null
+          Set-Content $sentinel "retain-user-data"
+          foreach ($pass in 1..2) {
+            $p = Start-Process artifacts/AlfaRaceX-Setup.exe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$installRoot") -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "Install failed $($p.ExitCode)" }
+            $p = Start-Process "$installRoot/AlfaRaceX.exe" -ArgumentList '--smoke-test' -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "Installed smoke failed" }
+          }
+          $p = Start-Process "$installRoot/unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or (Test-Path "$installRoot/AlfaRaceX.exe")) { throw "Uninstall failed" }
+          if ((Get-Content $sentinel) -ne 'retain-user-data') { throw "User data lost" }
+          $p = Start-Process artifacts/AlfaRaceX-Setup.exe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$installRoot") -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Reinstall failed" }
+          if ((Get-Content $sentinel) -ne 'retain-user-data') { throw "User data lost on reinstall" }
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
@@ -98,19 +104,5 @@ jobs:
           path: |
             artifacts/AlfaRaceX-Setup.exe
             artifacts/AlfaRaceX-Setup.sha256
-            Releases/*.nupkg
-            Releases/RELEASES
 
-      - name: Publish AlfaRaceX Desktop release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          [xml]$project = Get-Content desktop/AlfaRaceX.Desktop/AlfaRaceX.Desktop.csproj
-          $version = [string]$project.Project.PropertyGroup.Version
-          $tag = "desktop-v$version"
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --title "AlfaRaceX Desktop $version" --notes "Prima distribuzione Windows installabile di AlfaRaceX Desktop. Build WPF/WebView2 con dati persistenti separati, SQLite e packaging Velopack."
-          }
-          gh release upload $tag artifacts/AlfaRaceX-Setup.exe artifacts/AlfaRaceX-Setup.sha256 Releases/*-full.nupkg Releases/RELEASES --clobber
+
