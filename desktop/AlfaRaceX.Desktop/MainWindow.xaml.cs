@@ -12,9 +12,9 @@ namespace AlfaRaceX.Desktop;
 public partial class MainWindow : Window
 {
     private const string UiHost = "app.alfaracex.local";
-    private const string DisclaimerVersion = "2026-09-24-v1";
+    private static string DisclaimerVersion => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "DISCLAIMER.md"))));
     private readonly HistoryRepository _history = new(DesktopPaths.Database);
-    private readonly UpdateCoordinator _updates = new();
+    private readonly DesktopUpdateCoordinator _updates = new();
     private readonly BackupRestoreService _backups = new();
     private readonly Dictionary<string, PreparedFirmware> _prepared = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _operation;
@@ -27,7 +27,14 @@ public partial class MainWindow : Window
         _history.Initialize();
         _history.AddEvent("INFO", "APP", $"Avvio AlfaRaceX Desktop {AppVersion}.");
         Loaded += OnLoaded;
-        Closed += (_, _) => _operation?.Cancel();
+        Closing += (_, e) =>
+        {
+            if (_operation is not null)
+            {
+                e.Cancel = true;
+                MessageBox.Show(this, "Attendi il completamento o annulla l’operazione prima di chiudere.", "Operazione in corso");
+            }
+        };
     }
 
     private static string AppVersion =>
@@ -107,6 +114,7 @@ public partial class MainWindow : Window
                 break;
             case "acceptDisclaimer":
                 AcceptDisclaimer();
+                await SendInitialStateAsync();
                 break;
             case "exitApplication":
                 Close();
@@ -134,6 +142,16 @@ public partial class MainWindow : Window
                 break;
             case "importBackup":
                 ImportBackup(ReadString(payload, "role"));
+                break;
+            case "copyLogs":
+                Clipboard.SetText(ExportLogText());
+                break;
+            case "exportLogs":
+                var save = new SaveFileDialog { Filter = "Log (*.log)|*.log", FileName = $"AlfaRaceX-{DateTime.Now:yyyyMMdd-HHmmss}.log" };
+                if (save.ShowDialog(this) == true) File.WriteAllText(save.FileName, ExportLogText());
+                break;
+            case "openLogFolder":
+                OpenFolder(DesktopPaths.Logs);
                 break;
             case "getLogs":
                 SendLogs();
@@ -175,8 +193,10 @@ public partial class MainWindow : Window
             repository = "https://github.com/AriotaG/AlfaRaceX-Framework",
             disclaimerVersion = DisclaimerVersion,
             disclaimerAccepted = IsDisclaimerAccepted(),
-            disclaimerAcceptedUtc = _history.GetSetting("DisclaimerAcceptedUtc")
+            disclaimerAcceptedUtc = _history.GetSetting("DisclaimerAcceptedUtc"),
+            disclaimerText = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "DISCLAIMER.md"))
         });
+        if (!IsDisclaimerAccepted()) return;
         await SendDashboardAsync();
         await SendManifestAsync(force: false);
         SendBackups();
@@ -199,20 +219,28 @@ public partial class MainWindow : Window
             dfuCount,
             backupCount = _history.CountBackups(),
             preparedCount = _prepared.Count,
-            dataRoot = DesktopPaths.Root
+            dataRoot = DesktopPaths.Root,
+            lastCheckUtc = _history.GetSetting("LastCheckUtc")
         });
     }
 
     private async Task SendManifestAsync(bool force)
     {
+        if (_operation is not null) throw new InvalidOperationException("Attendi la fine dell’operazione prima di cambiare manifest.");
         try
         {
             if (_manifest is null || force)
-                _manifest = await _updates.LoadManifestAsync(CancellationToken.None);
+            {
+                var manifest = await _updates.LoadManifestAsync(CancellationToken.None);
+                _prepared.Clear();
+                _manifest = manifest;
+                _history.SetSetting("LastCheckUtc", DateTime.UtcNow.ToString("O"));
+            }
 
             Post("manifest", new
             {
                 version = _manifest.Version,
+                releases = _updates.Releases,
                 channel = _manifest.Channel,
                 targets = _manifest.Targets.Select(t => new
                 {
@@ -257,13 +285,16 @@ public partial class MainWindow : Window
         if (!_prepared.TryGetValue(role, out PreparedFirmware? firmware))
             throw new InvalidOperationException("Prima scarica e verifica il pacchetto firmware.");
 
+        if (MessageBox.Show(this, $"Programmare {role}? Verifica fisicamente la porta del modulo: il bootloader DFU non identifica il ruolo. Verrà creato e catalogato un backup prima della scrittura.", "Conferma programmazione", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         await RunExclusiveAsync("FLASH", async ct =>
         {
             var progress = new Progress<(string Message, int Progress)>(p =>
                 Post("operationProgress", new { kind = "flash", role, message = p.Message, progress = p.Progress }));
 
             Log("INFO", "FLASH", $"Avvio programmazione {role} firmware {_manifest?.Version}.");
-            await _updates.FlashAsync(firmware, progress, msg => Log("INFO", "DFU", msg), ct);
+            await SafeFlashAsync(firmware, progress, ct);
+            _history.SetSetting($"LastFlashedVersion:{role}", _manifest?.Version ?? "unknown");
+            SendBackups();
             Log("INFO", "FLASH", $"Programmazione {role} completata e verificata.");
             Post("operationComplete", new { kind = "flash", role, message = $"{role} programmato e verificato." });
         });
@@ -308,11 +339,18 @@ public partial class MainWindow : Window
         if (!File.Exists(backup.BinPath))
             throw new FileNotFoundException("Il file del backup catalogato non esiste più.", backup.BinPath);
 
+        if (MessageBox.Show(this, $"Ripristinare {backup.Role}? La Flash verrà riscritta. Verifica la porta: il ruolo fisico non è identificabile dal bootloader.", "Conferma ripristino", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         await RunExclusiveAsync("RESTORE", async ct =>
         {
             var progress = new Progress<(string Message, int Progress)>(p =>
                 Post("operationProgress", new { kind = "restore", role = backup.Role, message = p.Message, progress = p.Progress }));
 
+            await using (var input = File.OpenRead(backup.BinPath))
+            {
+                var hash = Convert.ToHexString(await SHA256.HashDataAsync(input, ct));
+                if (!hash.Equals(backup.Sha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Il backup è stato modificato: SHA-256 diverso dal catalogo.");
+            }
             Log("WARN", "RESTORE", $"Avvio ripristino {backup.Role} da {Path.GetFileName(backup.BinPath)}.");
             await _backups.RestoreAsync(
                 backup.Role,
@@ -344,8 +382,18 @@ public partial class MainWindow : Window
             throw new InvalidDataException($"Backup non valido: attesi {BackupRestoreService.FlashSize} byte, trovati {info.Length}.");
 
         string sha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(dialog.FileName))).ToLowerInvariant();
+        string destination = Path.Combine(DesktopPaths.Backups, $"AlfaRaceX-{role}-import-{Guid.NewGuid():N}.bin");
         string metadata = Path.ChangeExtension(dialog.FileName, ".json");
-        _history.AddBackup(role, dialog.FileName, File.Exists(metadata) ? metadata : string.Empty, sha, info.Length, info.CreationTimeUtc, "imported");
+        if (File.Exists(metadata))
+        {
+            var meta = JsonSerializer.Deserialize<BackupMetadata>(File.ReadAllText(metadata));
+            if (meta is null || !meta.Role.Equals(role, StringComparison.OrdinalIgnoreCase) || !meta.Sha256.Equals(sha, StringComparison.OrdinalIgnoreCase) || meta.FlashSize != info.Length || meta.FlashStart != BackupRestoreService.FlashStart)
+                throw new InvalidDataException("Metadati backup incompatibili con il file o il ruolo scelto.");
+        }
+        File.Copy(dialog.FileName, destination);
+        string savedMeta = Path.ChangeExtension(destination, ".json");
+        if (File.Exists(metadata)) File.Copy(metadata, savedMeta);
+        _history.AddBackup(role, destination, File.Exists(savedMeta) ? savedMeta : string.Empty, sha, info.Length, DateTime.UtcNow, "imported");
         Log("INFO", "BACKUP", $"Importato backup {role}: {Path.GetFileName(dialog.FileName)} ({sha}).");
         SendBackups();
     }
@@ -368,7 +416,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Log("ERROR", category, ex.Message);
+            Log("ERROR", category, ex.ToString());
             Post("operationFailed", new { category, message = ex.Message });
         }
         finally
@@ -432,10 +480,48 @@ public partial class MainWindow : Window
 
     private void Post(string type, object data)
     {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(new Action(() => Post(type, data)));
+            return;
+        }
         if (Browser.CoreWebView2 is null)
             return;
         string json = JsonSerializer.Serialize(new { type, data });
         Browser.CoreWebView2.PostWebMessageAsJson(json);
+    }
+
+    private string ExportLogText() => string.Join(Environment.NewLine,
+        _history.GetEvents(5000).Select(x => $"{x.CreatedUtc:O}\t{x.Level}\t{x.Category}\t{x.Message}"));
+
+    private Task SafeFlashAsync(PreparedFirmware firmware, IProgress<(string Message, int Progress)> progress, CancellationToken ct) => Task.Run(() =>
+    {
+        var drive = new DriveInfo(Path.GetPathRoot(DesktopPaths.Backups)!);
+        if (drive.AvailableFreeSpace < 4 * 1024 * 1024) throw new IOException("Spazio insufficiente per il backup preventivo.");
+        string hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(firmware.LocalPath)));
+        if (!hash.Equals(firmware.Target.Sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Firmware locale modificato dopo il download.");
+        using var dfu = DfuDevice.OpenSingle();
+        progress.Report(("Backup automatico prima della scrittura…", 0));
+        byte[] data = dfu.ReadMemory(BackupRestoreService.FlashStart, BackupRestoreService.FlashSize,
+            new InlineProgress<int>(p => progress.Report(("Backup automatico…", p))), ct);
+        string sha = Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
+        string path = Path.Combine(DesktopPaths.Backups, $"AlfaRaceX-{firmware.Target.Id}-preflash-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.bin");
+        File.WriteAllBytes(path, data);
+        if (!SHA256.HashData(File.ReadAllBytes(path)).SequenceEqual(SHA256.HashData(data))) throw new IOException("Verifica backup su disco fallita.");
+        string metadata = Path.ChangeExtension(path, ".json");
+        File.WriteAllText(metadata, JsonSerializer.Serialize(new BackupMetadata { Role = firmware.Target.Id, CreatedUtc = DateTime.UtcNow, FlashStart = BackupRestoreService.FlashStart, FlashSize = data.Length, Sha256 = sha, FileName = Path.GetFileName(path), UpdaterVersion = AppVersion }));
+        _history.AddBackup(firmware.Target.Id, path, metadata, sha, data.Length, DateTime.UtcNow, "automatic-preflash");
+        ct.ThrowIfCancellationRequested();
+        // Keep the same USB handle from backup through readback: do not reopen another device.
+        dfu.ProgramAndVerify(firmware.Image, AppConstants.FlashPageSize,
+            new InlineProgress<int>(p => progress.Report(("Programmazione e verifica…", p))), msg => Log("INFO", "DFU", msg), ct);
+        try { dfu.Leave(firmware.Target.ApplicationStart); }
+        catch (IOException) { Log("INFO", "DFU", "Disconnessione dopo il comando di avvio."); }
+    }, ct);
+
+    private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
     }
 
     private static string NormalizeRole(string role)
