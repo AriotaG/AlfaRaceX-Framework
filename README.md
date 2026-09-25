@@ -105,7 +105,7 @@ state, progress, backup history and logs are populated dynamically by the applic
 
 ## AlfaRaceX Hardware
 
-![AlfaRaceX wireless OBD hardware](docs/images/alfaracex-hardware-wireless.png)
+![AlfaRaceX wireless OBD hardware](docs/images/alfaracex-updater-dashboard.png)
 
 AlfaRaceX can optionally be paired with a dedicated compact OBD-II hardware interface developed for the project.
 
