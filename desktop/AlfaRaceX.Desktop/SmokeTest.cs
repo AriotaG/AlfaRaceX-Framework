@@ -19,10 +19,15 @@ internal static class SmokeTest
             if (repository.GetSetting("DisclaimerVersion") != "test-v2") throw new InvalidOperationException("Disclaimer version update failed.");
             repository.AddBackup("BH", Path.Combine(root,"test.bin"), "", new string('a',64), 131072, DateTime.UtcNow, "smoke");
             if (repository.CountBackups() != 1 || repository.GetBackups()[0].Role != "BH") throw new InvalidOperationException("Backup catalog failed.");
+            repository.SaveNotes(repository.GetBackups()[0].Id, "Preserve this note");
+            if (repository.GetBackups()[0].Notes != "Preserve this note") throw new InvalidOperationException("Backup notes failed.");
+            long operation = repository.StartOperation("FLASH", "test-version");
+            repository.FinishOperation(operation, "completed");
             repository.AddEvent("ERROR", "SMOKE", "Synthetic test error");
             if (repository.GetEvents()[0].Message != "Synthetic test error") throw new InvalidOperationException("Event persistence failed.");
             repository.ClearEvents();
             if (repository.GetEvents().Count != 0) throw new InvalidOperationException("Clear logs failed.");
+            if (repository.GetOperations().Count != 1) throw new InvalidOperationException("Operation history lost after log cleanup.");
             Console.WriteLine("ALFARACEX_SMOKE_OK");
             return 0;
         }

@@ -137,6 +137,10 @@
       case 'manifest': renderManifest(d); break;
       case 'manifestError': toast(`Manifest firmware non disponibile: ${d.message}`, 'Connessione'); break;
       case 'backups': renderBackups(d); break;
+      case 'operations':
+        const names = { running: 'In corso', completed: 'Completata', cancelled: 'Annullata', failed: 'Fallita' };
+        $('operationHistory').innerHTML = d.map(x => `<tr><td>${esc(new Date(x.startedUtc).toLocaleString('it-IT'))}</td><td>${esc(x.kind)}</td><td>${esc(x.version || '—')}</td><td>${esc(names[x.status] || x.status)}</td></tr>`).join('');
+        break;
       case 'logs': renderLogs(d); $('dashboardLogs').innerHTML = $('logList').innerHTML; break;
       case 'log': renderLogs([d, ...(state.logs || [])].slice(0,500)); $('dashboardLogs').innerHTML = $('logList').innerHTML; break;
       case 'busy': setBusy(d.value); break;

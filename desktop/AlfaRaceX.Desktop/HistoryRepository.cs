@@ -244,6 +244,17 @@ internal sealed class HistoryRepository
         command.ExecuteNonQuery();
     }
 
+    public IReadOnlyList<object> GetOperations()
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Id,Kind,StartedUtc,FinishedUtc,Status,Version FROM Operations ORDER BY Id DESC LIMIT 50";
+        using var reader = command.ExecuteReader();
+        var rows = new List<object>();
+        while (reader.Read()) rows.Add(new { id = reader.GetInt64(0), kind = reader.GetString(1), startedUtc = reader.GetString(2), finishedUtc = reader.IsDBNull(3) ? null : reader.GetString(3), status = reader.GetString(4), version = reader.IsDBNull(5) ? null : reader.GetString(5) });
+        return rows;
+    }
+
     public void SaveNotes(long id, string notes)
     {
         using var connection = Open();

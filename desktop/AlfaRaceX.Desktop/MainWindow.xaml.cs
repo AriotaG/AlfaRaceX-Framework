@@ -509,6 +509,7 @@ public partial class MainWindow : Window
 
     private void SendLogs()
     {
+        Post("operations", _history.GetOperations());
         Post("logs", _history.GetEvents().Select(x => new
         {
             id = x.Id,
