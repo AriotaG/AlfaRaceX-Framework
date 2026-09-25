@@ -1,5 +1,7 @@
 # Replacement release gate
 
+> Audit 2026-09-25: questa tabella conserva lo stato storico del progetto. I PASS hardware/profile indicano contratti software e build, non misure sul dispositivo. Stato corrente e limiti: [audit](AUDIT_2026-09-25.md) e [matrice](PARITY_2026-09-25.md).
+
 A release may be described as a complete drop-in replacement only after every gate
 below is green.
 
@@ -31,7 +33,7 @@ below is green.
 | Passive in-vehicle validation | PENDING |
 | Controlled active-feature validation | PENDING |
 
-All software/build gates are complete. The project remains a prerelease until the
+I risultati storici non dimostrano il completamento di tutti i gate software: restano aperti i casi negativi e di recovery elencati nell’audit corrente. The project remains a prerelease until the
 three physical gates (bench, passive vehicle, controlled active validation) pass on
 the existing hardware. Only then may it be promoted to 1.0.0 Stable and described
 as a validated drop-in replacement.

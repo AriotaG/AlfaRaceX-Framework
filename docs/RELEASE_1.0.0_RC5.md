@@ -1,5 +1,7 @@
 # AlfaRaceX 1.0.0-rc5
 
+> Nota audit 2026-09-25: le affermazioni sul backup in questa nota di release sono storiche. In questa sessione i byte del master non sono stati recuperati; capacità Flash, VID/PID e contenuti devono essere riconfermati prima delle prove fisiche. Vedere [audit](AUDIT_2026-09-25.md).
+
 RC5 is a hardware-parity and diagnostic-integration candidate based on direct
 comparison with a backed-up physical three-controller STM32F072 reference unit.
 

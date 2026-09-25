@@ -44,6 +44,11 @@ Install-TestApp
 $installedExe = Join-Path $testInstall 'current\AlfaRaceX.exe'
 Run-TestProcess $installedExe @('--ui-smoke-test') 60000
 
+for ($attempt = 1; $attempt -le 10; $attempt++) {
+    Write-Output "UI startup/shutdown repetition $attempt/10"
+    Run-TestProcess $installedExe @('--ui-smoke-test') 60000
+}
+
 # Copy a database produced by the real UI/disclaimer test into the normal data
 # location. These are synthetic CI records, never a user's backups or database.
 $smokeRoot = Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'AlfaRaceX-Smoke-*' |
