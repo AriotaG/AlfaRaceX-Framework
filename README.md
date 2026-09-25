@@ -88,7 +88,7 @@ For the detailed engineering status of each function see [FEATURE_MATRIX](docs/F
 
 ## AlfaRaceX Desktop
 
-![AlfaRaceX Desktop visual reference](docs/images/alfaracex-updater-dashboard.png)
+![AlfaRaceX Desktop visual reference](docs/images/alfaracex-updater-dashboard.jpg)
 
 The official Windows host application is now **AlfaRaceX Desktop**, located under
 `desktop/AlfaRaceX.Desktop`. It uses a .NET 8/WPF shell with a fully local WebView2
@@ -105,7 +105,7 @@ state, progress, backup history and logs are populated dynamically by the applic
 
 ## AlfaRaceX Hardware
 
-![AlfaRaceX wireless OBD hardware](docs/images/alfaracex-hardware-wireless.jpg.png)
+![AlfaRaceX wireless OBD hardware](docs/images/alfaracex-hardware-wireless.png)
 
 AlfaRaceX can optionally be paired with a dedicated compact OBD-II hardware interface developed for the project.
 
