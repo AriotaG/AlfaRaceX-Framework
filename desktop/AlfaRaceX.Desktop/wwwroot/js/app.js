@@ -74,10 +74,16 @@
       return `<tr>
         <td>${esc(dt)}</td><td><strong>${esc(b.role)}</strong></td>
         <td>${esc(b.fileName)}${b.exists ? '' : ' <small style="color:#ff657d">(mancante)</small>'}</td>
-        <td><code title="${esc(b.sha256)}">${esc(sha)}</code></td><td>${esc(b.source)}</td>
-        <td><div class="table-actions"><button class="mini-btn locate" data-id="${b.id}">Apri</button><button class="mini-btn danger restore" data-id="${b.id}" ${b.exists && !state.busy ? '' : 'disabled'}>Ripristina</button></div></td>
+        <td><code title="${esc(b.sha256)}">${esc(sha)}</code></td><td>${esc(b.source)}<small class="backup-note">${esc(b.notes || '')}</small></td>
+        <td><div class="table-actions"><button class="mini-btn notes" data-id="${b.id}">Note</button><button class="mini-btn verify" data-id="${b.id}" ${b.exists ? '' : 'disabled'}>Verifica</button><button class="mini-btn locate" data-id="${b.id}">Apri</button><button class="mini-btn danger restore" data-id="${b.id}" ${b.exists && !state.busy ? '' : 'disabled'}>Ripristina</button></div></td>
       </tr>`;
     }).join('');
+    document.querySelectorAll('.notes').forEach(b => b.onclick = () => {
+      const item = state.backups.find(x => x.id === Number(b.dataset.id));
+      const notes = prompt('Note del backup (massimo 2000 caratteri)', item.notes || '');
+      if (notes !== null) host('saveBackupNotes', { id: item.id, notes });
+    });
+    document.querySelectorAll('.verify').forEach(b => b.onclick = () => host('verifyBackup', { id: Number(b.dataset.id) }));
     document.querySelectorAll('.locate').forEach(b => b.addEventListener('click', () => host('openBackupLocation', { id: Number(b.dataset.id) })));
     document.querySelectorAll('.restore').forEach(b => b.addEventListener('click', () => {
       const item = state.backups.find(x => x.id === Number(b.dataset.id));
@@ -148,6 +154,7 @@
         break;
       case 'operationFailed': $('operationText').textContent = 'Operazione fallita: ' + d.message; toast(d.message || 'Operazione fallita.', 'Errore'); break;
       case 'operationCancelled': $('operationText').textContent = 'Operazione annullata; verifica lo stato del modulo prima di scollegarlo.'; toast('Operazione annullata.', 'AlfaRaceX'); break;
+      case 'notice': toast(d.message); break;
       case 'error': toast(d.message || 'Errore imprevisto.', 'Errore'); break;
     }
   });

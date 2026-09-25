@@ -10,7 +10,8 @@ internal sealed record BackupRecord(
     string Sha256,
     long Size,
     DateTime CreatedUtc,
-    string Source);
+    string Source,
+    string Notes);
 
 internal sealed record HistoryEvent(
     long Id,
@@ -68,6 +69,20 @@ internal sealed class HistoryRepository
             CREATE INDEX IF NOT EXISTS IX_Events_CreatedUtc
                 ON Events(CreatedUtc DESC);
 
+            CREATE TABLE IF NOT EXISTS Operations (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Kind TEXT NOT NULL,
+                StartedUtc TEXT NOT NULL,
+                FinishedUtc TEXT,
+                Status TEXT NOT NULL,
+                Version TEXT,
+                Error TEXT
+            );
+            CREATE TABLE IF NOT EXISTS BackupNotes (
+                BackupId INTEGER PRIMARY KEY,
+                Notes TEXT NOT NULL,
+                FOREIGN KEY (BackupId) REFERENCES Backups(Id)
+            );
             CREATE TABLE IF NOT EXISTS Settings (
                 Key TEXT PRIMARY KEY,
                 Value TEXT NOT NULL,
@@ -135,8 +150,8 @@ internal sealed class HistoryRepository
         using var connection = Open();
         using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT Id, Role, BinPath, MetadataPath, Sha256, Size, CreatedUtc, Source
-            FROM Backups
+            SELECT b.Id, b.Role, b.BinPath, b.MetadataPath, b.Sha256, b.Size, b.CreatedUtc, b.Source, COALESCE(n.Notes, '')
+            FROM Backups b LEFT JOIN BackupNotes n ON b.Id=n.BackupId
             ORDER BY CreatedUtc DESC;
             """;
 
@@ -152,7 +167,8 @@ internal sealed class HistoryRepository
                 reader.GetString(4),
                 reader.GetInt64(5),
                 DateTime.Parse(reader.GetString(6), null, System.Globalization.DateTimeStyles.RoundtripKind),
-                reader.GetString(7)));
+                reader.GetString(7),
+                reader.GetString(8)));
         }
         return result;
     }
@@ -228,10 +244,46 @@ internal sealed class HistoryRepository
         command.ExecuteNonQuery();
     }
 
+    public void SaveNotes(long id, string notes)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "INSERT INTO BackupNotes(BackupId, Notes) VALUES($id,$notes) ON CONFLICT(BackupId) DO UPDATE SET Notes=excluded.Notes;";
+        command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$notes", notes);
+        command.ExecuteNonQuery();
+    }
+
+    public long StartOperation(string kind, string? version)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "INSERT INTO Operations(Kind, StartedUtc, Status, Version) VALUES($kind,$start,'running',$version); SELECT last_insert_rowid();";
+        command.Parameters.AddWithValue("$kind",kind);
+        command.Parameters.AddWithValue("$start",DateTime.UtcNow.ToString("O"));
+        command.Parameters.AddWithValue("$version",(object?)version ?? DBNull.Value);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    public void FinishOperation(long id, string status, string? error = null)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE Operations SET FinishedUtc=$time, Status=$status, Error=$error WHERE Id=$id";
+        command.Parameters.AddWithValue("$id",id);
+        command.Parameters.AddWithValue("$time",DateTime.UtcNow.ToString("O"));
+        command.Parameters.AddWithValue("$status",status);
+        command.Parameters.AddWithValue("$error",(object?)error ?? DBNull.Value);
+        command.ExecuteNonQuery();
+    }
+
     private SqliteConnection Open()
     {
         var connection = new SqliteConnection(_connectionString);
         connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA foreign_keys=ON;";
+        command.ExecuteNonQuery();
         return connection;
     }
 

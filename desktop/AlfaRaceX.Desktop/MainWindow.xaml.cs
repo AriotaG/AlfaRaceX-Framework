@@ -19,6 +19,8 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, PreparedFirmware> _prepared = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _operation;
     private UpdateManifest? _manifest;
+    private readonly System.Windows.Threading.DispatcherTimer _deviceTimer = new() { Interval = TimeSpan.FromSeconds(3) };
+    private bool _checkingDevice;
 
     public MainWindow()
     {
@@ -27,6 +29,13 @@ public partial class MainWindow : Window
         _history.Initialize();
         _history.AddEvent("INFO", "APP", $"Avvio AlfaRaceX Desktop {AppVersion}.");
         Loaded += OnLoaded;
+        _deviceTimer.Tick += async (_, _) =>
+        {
+            if (_checkingDevice || _operation is not null || !IsDisclaimerAccepted()) return;
+            _checkingDevice = true;
+            try { await SendDashboardAsync(); } finally { _checkingDevice = false; }
+        };
+        Closed += (_, _) => _deviceTimer.Stop();
         Closing += (_, e) =>
         {
             if (_operation is not null)
@@ -166,6 +175,24 @@ public partial class MainWindow : Window
             case "openLogFolder":
                 OpenFolder(DesktopPaths.Logs);
                 break;
+            case "saveBackupNotes":
+                long noteId = ReadLong(payload, "id");
+                if (_history.GetBackup(noteId) is null) throw new FileNotFoundException("Backup non presente.");
+                string notes = ReadString(payload, "notes");
+                if (notes.Length > 2000) throw new ArgumentException("Nota troppo lunga (massimo 2000 caratteri).");
+                _history.SaveNotes(noteId, notes);
+                SendBackups();
+                break;
+            case "verifyBackup":
+                var selected = _history.GetBackup(ReadLong(payload, "id")) ?? throw new FileNotFoundException("Backup non presente.");
+                await using (var file = File.OpenRead(selected.BinPath))
+                {
+                    string hash = Convert.ToHexString(await SHA256.HashDataAsync(file));
+                    if (file.Length != selected.Size || !hash.Equals(selected.Sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Integrità del backup non valida.");
+                }
+                Log("INFO", "BACKUP", $"Integrità verificata: {selected.Role} / {Path.GetFileName(selected.BinPath)}");
+                Post("notice", new { message = "Backup integro: dimensione e SHA-256 verificati." });
+                break;
             case "getLogs":
                 SendLogs();
                 break;
@@ -175,7 +202,8 @@ public partial class MainWindow : Window
                 SendLogs();
                 break;
             case "cancelOperation":
-                _operation?.Cancel();
+                if (_operation is not null && MessageBox.Show(this, "Annullare l’operazione? Se la scrittura è già iniziata, il firmware può restare incompleto: mantieni il modulo collegato per ripristinarlo.", "Annullamento", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+                    _operation.Cancel();
                 break;
             case "openDataFolder":
                 OpenFolder(DesktopPaths.Root);
@@ -210,6 +238,7 @@ public partial class MainWindow : Window
             disclaimerText = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "DISCLAIMER.md"))
         });
         if (!IsDisclaimerAccepted()) return;
+        _deviceTimer.Start();
         await SendDashboardAsync();
         await SendManifestAsync(force: false);
         SendBackups();
@@ -416,19 +445,23 @@ public partial class MainWindow : Window
         if (_operation is not null)
             throw new InvalidOperationException("È già in corso un'operazione. Attendi il completamento o annullala.");
 
+        long operationId = _history.StartOperation(category, _manifest?.Version);
         _operation = new CancellationTokenSource();
         Post("busy", new { value = true, category });
         try
         {
             await work(_operation.Token);
+            _history.FinishOperation(operationId, "completed");
         }
         catch (OperationCanceledException)
         {
+            _history.FinishOperation(operationId, "cancelled");
             Log("WARN", category, "Operazione annullata.");
             Post("operationCancelled", new { category });
         }
         catch (Exception ex)
         {
+            _history.FinishOperation(operationId, "failed", ex.ToString());
             Log("ERROR", category, ex.ToString());
             Post("operationFailed", new { category, message = ex.Message });
         }
@@ -468,6 +501,7 @@ public partial class MainWindow : Window
             size = b.Size,
             createdUtc = b.CreatedUtc,
             source = b.Source,
+            notes = b.Notes,
             exists = File.Exists(b.BinPath)
         });
         Post("backups", items);
