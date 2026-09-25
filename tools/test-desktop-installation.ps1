@@ -16,12 +16,14 @@ if (Test-Path -LiteralPath $testData) { throw 'Existing application data must no
 $setupExe = (Resolve-Path -LiteralPath $Setup).Path
 
 function Run-TestProcess([string]$File, [string[]]$Arguments, [int]$Timeout=120000) {
+    Write-Output "RUN: $File $Arguments"
     $proc = Start-Process -FilePath $File -ArgumentList $Arguments -WindowStyle Hidden -PassThru
     if (!$proc.WaitForExit($Timeout)) {
         Stop-Process -Id $proc.Id
         throw "Timeout: $File"
     }
     if ($proc.ExitCode -ne 0) { throw "$File returned $($proc.ExitCode)" }
+    Write-Output "PASS: $File $Arguments"
 }
 function Install-TestApp {
     Run-TestProcess $setupExe @('--silent','--installto',('"' + $testInstall + '"'))

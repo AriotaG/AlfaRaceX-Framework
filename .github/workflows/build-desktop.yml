@@ -106,6 +106,12 @@ jobs:
               if (Test-Path -LiteralPath $item) { Copy-Item -LiteralPath $item -Destination $dest -Recurse }
             }
           }
+          Get-ChildItem artifacts/smoke -Recurse -File | ForEach-Object {
+            Write-Output $_.FullName
+            Get-Content -LiteralPath $_.FullName
+          }
+          Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=(Get-Date).AddMinutes(-15); Level=2} -ErrorAction SilentlyContinue |
+            Where-Object { $_.Message -match 'AlfaRaceX' } | ForEach-Object { Write-Output $_.Message }
 
       - name: Upload smoke diagnostics
         if: always()
