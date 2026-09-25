@@ -87,7 +87,7 @@
     <section class="page" id="page-logs">
       <div class="section-intro">
         <div><span class="section-tag">DIAGNOSTICA</span><h2>Log e cronologia</h2><p>Eventi applicativi, operazioni DFU, backup, ripristini ed errori in un’unica cronologia persistente.</p></div>
-        <button class="mini-btn" id="copyLogsBtn">Copia</button><button class="mini-btn" id="exportLogsBtn">Esporta</button><button class="mini-btn" id="openLogsBtn">Cartella log</button><button class="btn-arx ghost" id="clearLogsBtn">Pulisci cronologia</button>
+        <select id="logMode" aria-label="Dettaglio log"><option value="user">Log utente</option><option value="technical">Log tecnico</option></select><button class="mini-btn" id="copyLogsBtn">Copia</button><button class="mini-btn" id="exportLogsBtn">Esporta</button><button class="mini-btn" id="openLogsBtn">Cartella log</button><button class="btn-arx ghost" id="clearLogsBtn">Pulisci cronologia</button>
       </div>
       <section class="panel log-panel"><div id="logList" class="log-list"></div></section>
     </section>
@@ -122,7 +122,7 @@
       </section>
     </section>
       <div class="operation-card" id="operationCard">
-        <h3>Avanzamento operazione</h3><div class="operation-stages"><span>① Verifica</span><span>② Download</span><span>③ Backup</span><span>④ Installazione</span><span>⑤ Verifica finale</span></div><div class="operation-row"><span id="operationText">Nessuna operazione in corso.</span><strong id="operationPercent">0%</strong></div>
+        <h3>Avanzamento operazione</h3><div class="operation-stages"><span data-stage="1"><b>1</b>Verifica</span><span data-stage="2"><b>2</b>Download</span><span data-stage="3"><b>3</b>Backup</span><span data-stage="4"><b>4</b>Installazione</span><span data-stage="5"><b>5</b>Verifica finale</span></div><div class="operation-row"><span id="operationText">Nessuna operazione in corso.</span><strong id="operationPercent">0%</strong></div>
         <div class="progress-track"><div class="progress-fill" id="operationProgress"></div></div>
         <button class="btn-link-danger" id="cancelBtn" hidden>Annulla operazione</button>
       </div>

@@ -445,7 +445,7 @@ public partial class MainWindow : Window
         if (_operation is not null)
             throw new InvalidOperationException("È già in corso un'operazione. Attendi il completamento o annullala.");
 
-        long operationId = _history.StartOperation(category, _manifest?.Version);
+        long operationId = _history.StartOperation(category, category is "UPDATE" or "FLASH" ? _manifest?.Version : null);
         _operation = new CancellationTokenSource();
         Post("busy", new { value = true, category });
         try

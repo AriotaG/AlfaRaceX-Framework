@@ -94,7 +94,7 @@
 
   function renderLogs(items) {
     state.logs = items || [];
-    $('logList').innerHTML = (items || []).map(x => `<div class="log-row ${esc(x.level)}"><span class="ts">${esc(new Date(x.createdUtc).toLocaleString('it-IT'))}</span><span class="lvl">${esc(x.level)}</span><span class="cat">${esc(x.category)}</span><span>${esc(x.message)}</span></div>`).join('');
+    $('logList').innerHTML = (items || []).map(x => `<div class="log-row ${esc(x.level)}"><span class="ts">${esc(new Date(x.createdUtc).toLocaleString('it-IT'))}</span><span class="lvl">${esc(x.level)}</span><span class="cat">${esc(x.category)}</span><span>${esc($('logMode').value === 'technical' ? x.message : String(x.message).split('\n')[0])}</span></div>`).join('');
   }
 
   function setBusy(value) {
@@ -141,6 +141,8 @@
       case 'log': renderLogs([d, ...(state.logs || [])].slice(0,500)); $('dashboardLogs').innerHTML = $('logList').innerHTML; break;
       case 'busy': setBusy(d.value); break;
       case 'operationProgress':
+        const stage = /backup/i.test(d.message || '') ? 3 : d.kind === 'prepare' ? 2 : /verifica finale/i.test(d.message || '') ? 5 : 4;
+        document.querySelectorAll('[data-stage]').forEach(el => el.classList.toggle('active', Number(el.dataset.stage) === stage));
         $('operationText').textContent = d.message || 'Operazione in corso…';
         $('operationPercent').textContent = `${d.progress ?? 0}%`;
         $('operationProgress').style.width = `${Math.max(0, Math.min(100, d.progress ?? 0))}%`;
@@ -183,6 +185,7 @@
 
   $('checkDashboard').onclick = () => { host('refreshDashboard'); host('loadManifest'); };
   $('downloadDashboard').onclick = () => host('prepareUpdate');
+  $('logMode').onchange = () => renderLogs(state.logs);
   $('copyLogsBtn').onclick = () => host('copyLogs');
   $('exportLogsBtn').onclick = () => host('exportLogs');
   $('openLogsBtn').onclick = () => host('openLogFolder');

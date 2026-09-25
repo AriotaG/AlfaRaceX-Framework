@@ -16,6 +16,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 WizardStyle=modern
+SetupIconFile=..\AlfaRaceX.Desktop\Brand.ico
 OutputDir=..\..\artifacts
 OutputBaseFilename=AlfaRaceX-Setup
 Compression=lzma2

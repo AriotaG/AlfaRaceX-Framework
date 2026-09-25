@@ -15,12 +15,14 @@
     <PublishTrimmed>false</PublishTrimmed>
     <DebugType>embedded</DebugType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Brand.ico</ApplicationIcon>
     <Version>0.2.0</Version>
     <FileVersion>0.2.0.0</FileVersion>
     <AssemblyVersion>0.2.0.0</AssemblyVersion>
   </PropertyGroup>
 
   <ItemGroup>
+    <Resource Include="Brand.ico" />
     <ApplicationDefinition Remove="App.xaml" />
     <Page Include="App.xaml" />
   </ItemGroup>
