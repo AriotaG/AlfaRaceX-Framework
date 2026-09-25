@@ -1,6 +1,6 @@
 # AlfaRaceX
 
-> **Audit 2026-09-25:** test host superati per i casi coperti; UI WebView2 e installazione pulita non ancora validate. DFU, identità MCU e parità fisica BACCAble restano aperti. La presenza del codice non certifica il funzionamento sul veicolo. Vedere [audit e limiti](docs/AUDIT_2026-09-25.md).
+> **Audit 2026-09-25:** test host, build ARM, UI WebView2 e prima installazione superati sui runner CI per i casi coperti. Il crash WebView2 locale e il ciclo completo di aggiornamento restano aperti. DFU, identità MCU e parità fisica BACCAble restano aperti. La presenza del codice non certifica il funzionamento sul veicolo. Vedere [audit e limiti](docs/AUDIT_2026-09-25.md).
 
 **AlfaRaceX (ARX)** is a modular embedded framework for CAN/UDS research, diagnostics,
 telemetry and feature development on Alfa Romeo Giulia and Stelvio vehicles.

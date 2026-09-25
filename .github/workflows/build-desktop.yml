@@ -17,6 +17,7 @@ on:
       - "updater/branding/**"
       - "distribution/**"
       - "tests/AlfaRaceX.HostTests/**"
+      - "tools/test-desktop-installation.ps1"
       - ".github/workflows/build-desktop.yml"
   pull_request:
     paths:
@@ -25,6 +26,7 @@ on:
       - "updater/branding/**"
       - "distribution/**"
       - "tests/AlfaRaceX.HostTests/**"
+      - "tools/test-desktop-installation.ps1"
       - ".github/workflows/build-desktop.yml"
 
 permissions:
@@ -89,16 +91,21 @@ jobs:
           $hash = (Get-FileHash artifacts/AlfaRaceX-Setup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  AlfaRaceX-Setup.exe" | Out-File -Encoding ascii artifacts/AlfaRaceX-Setup.sha256
 
-      - name: Install generated Setup and smoke test installed app
+      - name: Verify install, reinstall, uninstall and data preservation
+        run: ./tools/test-desktop-installation.ps1 -Setup artifacts/AlfaRaceX-Setup.exe -InstallRoot (Join-Path $env:RUNNER_TEMP 'AlfaRaceX-Installed')
+
+      - name: Collect smoke diagnostics
+        if: always()
         run: |
-          $installRoot = Join-Path $env:RUNNER_TEMP "AlfaRaceX-Installed"
-          if (Test-Path $installRoot) { throw "Install test directory must be fresh: $installRoot" }
-          $setupProc = Start-Process -FilePath ".\artifacts\AlfaRaceX-Setup.exe" -ArgumentList @("--silent","--installto",$installRoot) -WindowStyle Hidden -Wait -PassThru
-          if ($setupProc.ExitCode -ne 0) { throw "Installer returned exit code $($setupProc.ExitCode)." }
-          $exe = Get-ChildItem $installRoot -Recurse -Filter "AlfaRaceX.exe" | Select-Object -First 1
-          if (-not $exe) { throw "Installed AlfaRaceX.exe not found." }
-          $smokeProc = Start-Process -FilePath $exe.FullName -ArgumentList "--ui-smoke-test" -WindowStyle Hidden -Wait -PassThru
-          if ($smokeProc.ExitCode -ne 0) { throw "Installed executable smoke test failed with code $($smokeProc.ExitCode)." }
+          New-Item -ItemType Directory -Force -Path artifacts/smoke | Out-Null
+          Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'AlfaRaceX-Smoke-*' | ForEach-Object {
+            $dest = Join-Path 'artifacts/smoke' $_.Name
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            foreach ($name in @('ui-smoke-result.txt','Logs')) {
+              $item = Join-Path $_.FullName $name
+              if (Test-Path -LiteralPath $item) { Copy-Item -LiteralPath $item -Destination $dest -Recurse }
+            }
+          }
 
       - name: Upload smoke diagnostics
         if: always()
@@ -106,7 +113,7 @@ jobs:
         with:
           name: desktop-smoke-diagnostics
           if-no-files-found: ignore
-          path: ${{ runner.temp }}/AlfaRaceX-Smoke-*/**
+          path: artifacts/smoke/**
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
