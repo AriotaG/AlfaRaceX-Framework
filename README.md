@@ -3,6 +3,24 @@
 **AlfaRaceX (ARX)** is a modular embedded framework for CAN/UDS research, diagnostics,
 telemetry and feature development on Alfa Romeo Giulia and Stelvio vehicles.
 
+
+<div align="center">
+
+### Download AlfaRaceX / Scarica AlfaRaceX
+
+<a href="https://github.com/AriotaG/AlfaRaceX-Framework/releases/download/desktop-v0.1.0/AlfaRaceX-Setup.exe">
+  <img alt="Download for Windows" src="https://img.shields.io/badge/Windows-Download%20Installer-0078D4?style=for-the-badge&logo=windows11&logoColor=white">
+</a>
+&nbsp;
+<img alt="Android coming soon" src="https://img.shields.io/badge/Android-COMING%20SOON-555555?style=for-the-badge&logo=android&logoColor=white">
+&nbsp;
+<img alt="iOS coming soon" src="https://img.shields.io/badge/iOS-COMING%20SOON-555555?style=for-the-badge&logo=apple&logoColor=white">
+
+**Windows disponibile ora · Android e iOS sono nella roadmap**  
+**Windows available now · Android and iOS are on the roadmap**
+
+</div>
+
 The framework is intentionally split into independent layers:
 
 ```text
