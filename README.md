@@ -88,7 +88,7 @@ For the detailed engineering status of each function see [FEATURE_MATRIX](docs/F
 
 ## AlfaRaceX Desktop
 
-![AlfaRaceX Desktop visual reference](docs/images/alfaracex-updater-dashboard.jpg)
+![AlfaRaceX Desktop visual reference](docs/images/alfaracex-updater-dashboard.png)
 
 The official Windows host application is now **AlfaRaceX Desktop**, located under
 `desktop/AlfaRaceX.Desktop`. It uses a .NET 8/WPF shell with a fully local WebView2
