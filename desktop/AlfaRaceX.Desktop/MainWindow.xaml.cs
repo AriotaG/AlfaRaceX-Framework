@@ -70,6 +70,12 @@ public partial class MainWindow : Window
             };
             Browser.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
             Browser.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+            if (UiValidation.Enabled)
+                Browser.CoreWebView2.NavigationCompleted += async (_, args) =>
+                {
+                    if (args.IsSuccess) await UiValidation.RunAsync(this, Browser.CoreWebView2);
+                    else Application.Current.Shutdown(4);
+                };
             Browser.Source = new Uri($"https://{UiHost}/index.html");
         }
         catch (Exception ex)

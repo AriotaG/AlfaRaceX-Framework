@@ -22,7 +22,7 @@ on:
       - ".github/workflows/build-desktop.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-test-package:
@@ -69,6 +69,24 @@ jobs:
         run: |
           $proc = Start-Process -FilePath ".\publish\AlfaRaceX.exe" -ArgumentList "--smoke-test" -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw "Published executable smoke test failed with code $($proc.ExitCode)." }
+
+      - name: Validate real WPF and WebView2 first and subsequent launch
+        env:
+          ALFARACEX_UI_TEST_ROOT: ${{ runner.temp }}/AlfaRaceX-UI-Test
+        run: |
+          foreach ($stage in @('', '--subsequent')) {
+            $p = Start-Process .\publish\AlfaRaceX.exe -ArgumentList "--ui-validation $stage" -PassThru
+            if (-not $p.WaitForExit(120000)) { $p.Kill(); throw 'UI test timed out' }
+            if ($p.ExitCode -ne 0) { throw "UI validation failed: $($p.ExitCode)" }
+          }
+
+      - name: Upload UI validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlfaRaceX-UI-Validation
+          path: ${{ runner.temp }}/AlfaRaceX-UI-Test/validation/*
+          if-no-files-found: warn
 
       - name: Create Inno Setup installer
         run: |
