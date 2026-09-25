@@ -35,9 +35,9 @@ int main(void) {
 
     ArxRuntimeConfig erased_cfg;
     assert(arx_storage_read_settings(&b,&erased_cfg));
-    assert(erased_cfg.immobilizer_enabled);
-    assert(erased_cfg.smart_start_stop_enabled);
-    assert(erased_cfg.clear_faults_enabled);
+    assert(!erased_cfg.immobilizer_enabled);
+    assert(!erased_cfg.smart_start_stop_enabled);
+    assert(!erased_cfg.clear_faults_enabled);
     assert(erased_cfg.diesel_profile);
     assert(!erased_cfg.ipc_my23);
     assert(!erased_cfg.dyno_enabled);

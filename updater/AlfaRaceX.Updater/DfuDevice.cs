@@ -1,5 +1,6 @@
 using Microsoft.Win32.SafeHandles;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 
 namespace AlfaRaceX.Updater;
 
@@ -19,11 +20,16 @@ internal sealed class DfuDevice : IDisposable
     private readonly SafeFileHandle _file;
     private IntPtr _usb;
     public int TransferSize { get; }
+    public string DevicePath { get; }
+    private CancellationToken _cancellation;
 
-    private DfuDevice(SafeFileHandle file, IntPtr usb)
+    private DfuDevice(SafeFileHandle file, IntPtr usb, string devicePath)
     {
         _file = file;
         _usb = usb;
+        DevicePath = devicePath;
+        // WinUSB control transfers use the documented five-second timeout.
+        // Bulk/interrupt pipe policies are not applicable to EP0.
         if (!WinUsbNative.WinUsb_SetCurrentAlternateSetting(_usb, 0))
             WinUsbNative.ThrowLast("Impossibile selezionare l'interfaccia DFU.");
         TransferSize = ReadTransferSize();
@@ -58,9 +64,18 @@ internal sealed class DfuDevice : IDisposable
             WinUsbNative.ThrowLast("Driver USB non compatibile con WinUSB.");
         }
 
-        var device = new DfuDevice(file, usb);
-        device.NormalizeState();
-        return device;
+        try
+        {
+            var device = new DfuDevice(file, usb, paths[0]);
+            device.NormalizeState();
+            return device;
+        }
+        catch
+        {
+            WinUsbNative.WinUsb_Free(usb);
+            file.Dispose();
+            throw;
+        }
     }
 
     public void ProgramAndVerify(
@@ -70,7 +85,9 @@ internal sealed class DfuDevice : IDisposable
         Action<string>? log,
         CancellationToken ct)
     {
+        _cancellation = ct;
         var pages = image.TouchedPages(pageSize).ToArray();
+        if (pages.Length == 0) throw new InvalidDataException("Nessun dato da programmare.");
         int payloadBytes = image.Bytes.Count;
         long totalUnits = Math.Max(1L, (long)pages.Length * pageSize + (long)payloadBytes * 2L);
         long completed = 0;
@@ -81,6 +98,7 @@ internal sealed class DfuDevice : IDisposable
         {
             ct.ThrowIfCancellationRequested();
             ErasePage(page);
+            log?.Invoke($"ERASE 0x{page:X8}: OK");
             completed += pageSize;
             progress?.Report((int)Math.Clamp(completed * 100L / totalUnits, 0, 100));
         }
@@ -93,6 +111,7 @@ internal sealed class DfuDevice : IDisposable
                 completed += bytes;
                 progress?.Report((int)Math.Clamp(completed * 100L / totalUnits, 0, 100));
             });
+            log?.Invoke($"WRITE 0x{segment.Address:X8}: {segment.Data.Length} byte OK");
         }
 
         foreach (var segment in image.Segments())
@@ -103,6 +122,7 @@ internal sealed class DfuDevice : IDisposable
                 completed += bytes;
                 progress?.Report((int)Math.Clamp(completed * 100L / totalUnits, 0, 100));
             });
+            log?.Invoke($"VERIFY 0x{segment.Address:X8}: {segment.Data.Length} byte OK");
         }
 
         progress?.Report(100);
@@ -110,6 +130,7 @@ internal sealed class DfuDevice : IDisposable
 
     public void Leave(uint applicationAddress)
     {
+        _cancellation.ThrowIfCancellationRequested();
         EnsureIdle();
         SetAddressPointer(applicationAddress);
         var setup = Setup(0x21, RequestDnload, 0, 0);
@@ -122,6 +143,7 @@ internal sealed class DfuDevice : IDisposable
         IProgress<int>? progress,
         CancellationToken ct)
     {
+        _cancellation = ct;
         if (length <= 0)
             throw new ArgumentOutOfRangeException(nameof(length));
 
@@ -168,6 +190,7 @@ internal sealed class DfuDevice : IDisposable
         Action<string>? log,
         CancellationToken ct)
     {
+        _cancellation = ct;
         if (data is null || data.Length == 0)
             throw new ArgumentException("Immagine raw vuota.", nameof(data));
         if (pageSize == 0 || address % pageSize != 0)
@@ -187,6 +210,7 @@ internal sealed class DfuDevice : IDisposable
         {
             ct.ThrowIfCancellationRequested();
             ErasePage(address + (uint)i * pageSize);
+            log?.Invoke($"ERASE 0x{address + (uint)i * pageSize:X8}: OK");
             completed += pageSize;
             progress?.Report(
                 (int)Math.Clamp(completed * 100L / totalUnits, 0, 100));
@@ -320,15 +344,23 @@ internal sealed class DfuDevice : IDisposable
 
     private void WaitDownloadIdle()
     {
-        for (int i = 0; i < 200; i++)
+        var timer = Stopwatch.StartNew();
+        while (timer.Elapsed < TimeSpan.FromSeconds(30))
         {
             DfuStatus s = GetStatus();
+            if (s.Status != 0)
+                throw new IOException($"DFU errore 0x{s.Status:X2}, stato {s.State}.");
             if (s.State == DfuDownloadIdle || s.State == DfuIdle)
                 return;
             if (s.State == DfuError)
                 throw new IOException($"DFU errore 0x{s.Status:X2}.");
 
-            Thread.Sleep(Math.Clamp(s.PollTimeoutMs, 1, 5000));
+            if (s.State is not (3 or DfuDownloadBusy))
+                throw new IOException($"Stato DFU inatteso durante download: {s.State}.");
+            int delay = Math.Max(1, s.PollTimeoutMs);
+            if (timer.ElapsedMilliseconds + delay > 30000)
+                throw new TimeoutException("Timeout richiesto dal dispositivo oltre il limite DFU.");
+            if (_cancellation.WaitHandle.WaitOne(delay)) _cancellation.ThrowIfCancellationRequested();
         }
 
         throw new TimeoutException("Timeout durante l'operazione DFU.");
@@ -349,20 +381,22 @@ internal sealed class DfuDevice : IDisposable
     {
         byte[] head = new byte[9];
         if (!WinUsbNative.WinUsb_GetDescriptor(_usb, 2, 0, 0, head, (uint)head.Length, out uint n) || n < 9)
-            return 1024;
+            throw new IOException("Descrittore di configurazione USB assente o incompleto.");
 
         int total = head[2] | (head[3] << 8);
-        if (total < 9 || total > 4096) return 1024;
+        if (total < 9 || total > 4096) throw new IOException("Dimensione descrittore USB non valida.");
 
         byte[] config = new byte[total];
         if (!WinUsbNative.WinUsb_GetDescriptor(_usb, 2, 0, 0, config, (uint)config.Length, out n))
-            return 1024;
+            throw new IOException("Lettura descrittore USB fallita.");
+
+        if (n != total) throw new IOException("Descrittore USB troncato.");
 
         for (int i = 0; (uint)(i + 8) < n;)
         {
             int len = config[i];
             int type = config[i + 1];
-            if (len < 2) break;
+            if (len < 2 || i + len > n) throw new IOException("Descrittore USB malformato.");
             if (type == 0x21 && len >= 9)
             {
                 int size = config[i + 5] | (config[i + 6] << 8);
@@ -371,7 +405,7 @@ internal sealed class DfuDevice : IDisposable
             i += len;
         }
 
-        return 1024;
+        throw new IOException("Descrittore funzionale DFU o transfer size non valido; operazione rifiutata.");
     }
 
     private static WinUsbNative.WinUsbSetupPacket Setup(
@@ -387,6 +421,7 @@ internal sealed class DfuDevice : IDisposable
 
     private uint Control(WinUsbNative.WinUsbSetupPacket setup, byte[] buffer)
     {
+        _cancellation.ThrowIfCancellationRequested();
         if (!WinUsbNative.WinUsb_ControlTransfer(
             _usb,
             setup,
@@ -398,6 +433,8 @@ internal sealed class DfuDevice : IDisposable
             int error = Marshal.GetLastWin32Error();
             throw new IOException($"Trasferimento DFU fallito. Errore Windows {error}.");
         }
+        if (transferred != buffer.Length)
+            throw new IOException($"Trasferimento DFU incompleto: richiesta {setup.Request}, blocco {setup.Value}, attesi {buffer.Length}, ricevuti {transferred}.");
         return transferred;
     }
 

@@ -4,6 +4,8 @@ This document is the engineering gate for functional parity. A feature is marked
 `PARITY` only when its observable behavior, message format, timing and restoration
 logic are represented in ARX and covered by deterministic tests.
 
+> Le etichette storiche `PARITY` sotto descrivono il modello software, non una prova comparativa eseguita su BACCAble. Per lo stato basato sulle evidenze dell’audit corrente vedere [Feature Parity Matrix](PARITY_2026-09-25.md).
+
 ## Status legend
 
 - `PARITY`: behavior is represented in the portable ARX core.

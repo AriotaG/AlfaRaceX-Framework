@@ -9,7 +9,8 @@ internal sealed record BackupResult(
     string BinPath,
     string MetadataPath,
     string Sha256,
-    int Size);
+    int Size,
+    string DevicePath);
 
 internal sealed class BackupMetadata
 {
@@ -21,6 +22,9 @@ internal sealed class BackupMetadata
     public int FlashSize { get; set; }
     public string Sha256 { get; set; } = "";
     public string FileName { get; set; } = "";
+    public string DevicePath { get; set; } = "";
+    public string RoleEvidence { get; set; } = "user-selected; physical MCU role not verified";
+    public string Scope { get; set; } = "internal-flash-only; excludes OTP, option bytes and system ROM";
 }
 
 internal sealed class BackupRestoreService
@@ -60,10 +64,16 @@ internal sealed class BackupRestoreService
             string hash = Convert.ToHexString(
                 SHA256.HashData(data)).ToLowerInvariant();
 
-            string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            string stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff") + "-" + Guid.NewGuid().ToString("N");
             string binName = $"AlfaRaceX-{role}-backup-{stamp}.bin";
             string binPath = Path.Combine(destinationFolder, binName);
-            File.WriteAllBytes(binPath, data);
+            using (var file = new FileStream(binPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                file.Write(data);
+                file.Flush(flushToDisk: true);
+            }
+            if (!CryptographicOperations.FixedTimeEquals(SHA256.HashData(File.ReadAllBytes(binPath)), SHA256.HashData(data)))
+                throw new IOException("Verifica del backup scritto su disco fallita.");
 
             var metadata = new BackupMetadata
             {
@@ -73,15 +83,16 @@ internal sealed class BackupRestoreService
                 FlashStart = FlashStart,
                 FlashSize = FlashSize,
                 Sha256 = hash,
-                FileName = binName
+                FileName = binName,
+                DevicePath = dfu.DevicePath
             };
 
             string metadataPath = Path.ChangeExtension(binPath, ".json");
-            File.WriteAllText(
-                metadataPath,
-                JsonSerializer.Serialize(
-                    metadata,
-                    new JsonSerializerOptions { WriteIndented = true }));
+            using (var file = new FileStream(metadataPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                JsonSerializer.Serialize(file, metadata, new JsonSerializerOptions { WriteIndented = true });
+                file.Flush(flushToDisk: true);
+            }
 
             log($"Backup {role}: SHA-256 {hash}.");
             progress.Report(($"Backup {role} completato.", 100));
@@ -91,7 +102,8 @@ internal sealed class BackupRestoreService
                 binPath,
                 metadataPath,
                 hash,
-                data.Length);
+                data.Length,
+                dfu.DevicePath);
         }, ct);
     }
 
@@ -104,7 +116,7 @@ internal sealed class BackupRestoreService
     {
         role = NormalizeRole(role);
 
-        return Task.Run(() =>
+        return Task.Run(async () =>
         {
             if (!File.Exists(binPath))
                 throw new FileNotFoundException(
@@ -128,10 +140,19 @@ internal sealed class BackupRestoreService
             string hash = Convert.ToHexString(
                 SHA256.HashData(data)).ToLowerInvariant();
 
-            VerifyMetadataIfPresent(role, binPath, hash);
+            VerifyRequiredMetadata(role, binPath, hash);
+
+            BackupResult safetyBackup = await BackupAsync(role,
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AlfaRaceX", "Backups"),
+                progress, log, ct);
 
             progress.Report(($"Connessione DFU {role}...", 0));
             using var dfu = DfuDevice.OpenSingle();
+            if (!string.Equals(dfu.DevicePath, safetyBackup.DevicePath, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Dispositivo cambiato dopo il backup: ripristino rifiutato.");
+            byte[] current = dfu.ReadMemory(FlashStart, FlashSize, null, ct);
+            if (!string.Equals(Convert.ToHexString(SHA256.HashData(current)), safetyBackup.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Contenuto Flash cambiato dopo il backup: ripristino rifiutato.");
 
             log($"Ripristino {role}: SHA-256 {hash}.");
             var restoreProgress = new Progress<int>(p =>
@@ -149,29 +170,32 @@ internal sealed class BackupRestoreService
             {
                 dfu.Leave(FlashStart);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
-                log($"{role}: disconnessione dopo comando di avvio.");
+                log($"{role}: Flash verificata; riavvio non confermato: {ex.Message}");
             }
 
             progress.Report(($"Ripristino {role} completato.", 100));
         }, ct);
     }
 
-    private static void VerifyMetadataIfPresent(
+    internal static void VerifyRequiredMetadata(
         string role,
         string binPath,
         string actualHash)
     {
         string metadataPath = Path.ChangeExtension(binPath, ".json");
         if (!File.Exists(metadataPath))
-            return;
+            throw new InvalidDataException("Ripristino rifiutato: mancano i metadati originali con ruolo MCU e SHA-256. Il nome file non dimostra la provenienza.");
 
         BackupMetadata? metadata = JsonSerializer.Deserialize<BackupMetadata>(
             File.ReadAllText(metadataPath));
 
         if (metadata is null)
             throw new InvalidDataException("Metadati backup non validi.");
+        if (metadata.Product != AppConstants.ProductName || metadata.CreatedUtc == default ||
+            !string.Equals(metadata.FileName, Path.GetFileName(binPath), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Metadati backup incompleti o associati a un altro file.");
 
         if (!string.Equals(metadata.Role, role, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException(

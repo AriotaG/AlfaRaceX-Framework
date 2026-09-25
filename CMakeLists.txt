@@ -99,6 +99,7 @@ foreach(test_name
     config_performance
     target_contract
     isotp_elm
+    isotp_integrity
     storage
     drive_led_usb
     runtime
