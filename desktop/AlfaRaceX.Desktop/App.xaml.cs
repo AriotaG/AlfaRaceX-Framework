@@ -22,6 +22,10 @@ public partial class App : Application
         }
         if (smoke) return SmokeTest.Run();
 
+        using var instance = new Mutex(true,
+            uiSmoke ? "Local\\AlfaRaceX.Smoke." + Guid.NewGuid().ToString("N") : "Local\\AlfaRaceX.Desktop",
+            out bool ownsInstance);
+        if (!ownsInstance) return 3;
         DesktopPaths.Ensure();
         var app = new App();
         app.InitializeComponent();

@@ -27,6 +27,9 @@ internal sealed class BackupMetadata
 
 internal sealed class BackupRestoreService
 {
+    private readonly Func<IDfuDevice> _openDevice;
+    public BackupRestoreService(Func<IDfuDevice>? openDevice = null) => _openDevice = openDevice ?? (() => DfuDevice.OpenSingle());
+
     public const uint FlashStart = 0x08000000u;
     public const int FlashSize = 0x20000;
 
@@ -47,7 +50,7 @@ internal sealed class BackupRestoreService
             Directory.CreateDirectory(destinationFolder);
 
             progress.Report(($"Connessione DFU {role}...", 0));
-            using var dfu = DfuDevice.OpenSingle();
+            using var dfu = _openDevice();
 
             log($"Backup {role}: lettura completa Flash interna.");
             var readProgress = new Progress<int>(p =>
@@ -106,7 +109,10 @@ internal sealed class BackupRestoreService
         string binPath,
         IProgress<(string Message, int Progress)> progress,
         Action<string> log,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? expectedSha256 = null,
+        string? safetyBackupFolder = null,
+        Action<BackupResult>? backupCreated = null)
     {
         role = NormalizeRole(role);
 
@@ -134,11 +140,17 @@ internal sealed class BackupRestoreService
             string hash = Convert.ToHexString(
                 SHA256.HashData(data)).ToLowerInvariant();
 
+            if (expectedSha256 is null && !File.Exists(Path.ChangeExtension(binPath, ".json")))
+                throw new InvalidDataException("Ripristino rifiutato: manca un hash registrato o un metadato di integrità.");
+            if (expectedSha256 is not null && !string.Equals(hash, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Il backup è cambiato dopo la catalogazione. Ripristino rifiutato.");
             VerifyMetadataIfPresent(role, binPath, hash);
 
             progress.Report(($"Connessione DFU {role}...", 0));
-            using var dfu = DfuDevice.OpenSingle();
+            using var dfu = _openDevice();
 
+            CaptureSafetyBackup(dfu, role, safetyBackupFolder, log, ct, backupCreated);
+            ct.ThrowIfCancellationRequested();
             log($"Ripristino {role}: SHA-256 {hash}.");
             var restoreProgress = new Progress<int>(p =>
                 progress.Report(($"Ripristino {role}: programmazione e verifica...", p)));
@@ -155,13 +167,27 @@ internal sealed class BackupRestoreService
             {
                 dfu.Leave(FlashStart);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
-                log($"{role}: disconnessione dopo comando di avvio.");
+                log($"{role}: Flash verificata; riavvio non confermato: {ex.Message}");
             }
 
             progress.Report(($"Ripristino {role} completato.", 100));
         }, ct);
+    }
+
+    internal static BackupResult CaptureSafetyBackup(IDfuDevice device, string role, string? folder,
+        Action<string> log, CancellationToken ct, Action<BackupResult>? backupCreated)
+    {
+        ct.ThrowIfCancellationRequested();
+        folder ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AlfaRaceX", "Backups");
+        log($"Backup preventivo {role}: lettura prima di ogni cancellazione Flash.");
+        byte[] data = device.ReadMemory(FlashStart, FlashSize, null, ct);
+        ct.ThrowIfCancellationRequested();
+        BackupResult backup = SaveSnapshot(role, folder, data);
+        backupCreated?.Invoke(backup);
+        log($"Backup preventivo verificato: {backup.BinPath}; SHA-256 {backup.Sha256}.");
+        return backup;
     }
 
     private static void VerifyMetadataIfPresent(

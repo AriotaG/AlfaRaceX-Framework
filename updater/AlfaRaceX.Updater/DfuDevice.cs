@@ -3,7 +3,15 @@ using System.Runtime.InteropServices;
 
 namespace AlfaRaceX.Updater;
 
-internal sealed class DfuDevice : IDisposable
+internal interface IDfuDevice : IDisposable
+{
+    byte[] ReadMemory(uint address, int length, IProgress<int>? progress, CancellationToken ct);
+    void ProgramAndVerify(IntelHexImage image, uint pageSize, IProgress<int>? progress, Action<string>? log, CancellationToken ct);
+    void ProgramRawAndVerify(uint address, byte[] data, uint pageSize, IProgress<int>? progress, Action<string>? log, CancellationToken ct);
+    void Leave(uint applicationAddress);
+}
+
+internal sealed class DfuDevice : IDfuDevice
 {
     private const byte RequestDnload = 1;
     private const byte RequestUpload = 2;
@@ -58,9 +66,18 @@ internal sealed class DfuDevice : IDisposable
             WinUsbNative.ThrowLast("Driver USB non compatibile con WinUSB.");
         }
 
-        var device = new DfuDevice(file, usb);
-        device.NormalizeState();
-        return device;
+        try
+        {
+            var device = new DfuDevice(file, usb);
+            device.NormalizeState();
+            return device;
+        }
+        catch
+        {
+            WinUsbNative.WinUsb_Free(usb);
+            file.Dispose();
+            throw;
+        }
     }
 
     public void ProgramAndVerify(
@@ -80,7 +97,7 @@ internal sealed class DfuDevice : IDisposable
         foreach (uint page in pages)
         {
             ct.ThrowIfCancellationRequested();
-            ErasePage(page);
+            ErasePage(page, ct);
             completed += pageSize;
             progress?.Report((int)Math.Clamp(completed * 100L / totalUnits, 0, 100));
         }
@@ -92,7 +109,7 @@ internal sealed class DfuDevice : IDisposable
             {
                 completed += bytes;
                 progress?.Report((int)Math.Clamp(completed * 100L / totalUnits, 0, 100));
-            });
+            }, ct);
         }
 
         foreach (var segment in image.Segments())
@@ -102,7 +119,7 @@ internal sealed class DfuDevice : IDisposable
             {
                 completed += bytes;
                 progress?.Report((int)Math.Clamp(completed * 100L / totalUnits, 0, 100));
-            });
+            }, ct);
         }
 
         progress?.Report(100);
@@ -126,7 +143,7 @@ internal sealed class DfuDevice : IDisposable
             throw new ArgumentOutOfRangeException(nameof(length));
 
         EnsureIdle();
-        SetAddressPointer(address);
+        SetAddressPointer(address, ct);
         EnsureIdle();
 
         byte[] result = new byte[length];
@@ -186,7 +203,7 @@ internal sealed class DfuDevice : IDisposable
         for (int i = 0; i < pages; i++)
         {
             ct.ThrowIfCancellationRequested();
-            ErasePage(address + (uint)i * pageSize);
+            ErasePage(address + (uint)i * pageSize, ct);
             completed += pageSize;
             progress?.Report(
                 (int)Math.Clamp(completed * 100L / totalUnits, 0, 100));
@@ -197,19 +214,19 @@ internal sealed class DfuDevice : IDisposable
             completed += bytes;
             progress?.Report(
                 (int)Math.Clamp(completed * 100L / totalUnits, 0, 100));
-        });
+        }, ct);
 
         VerifySegment(address, data, bytes =>
         {
             completed += bytes;
             progress?.Report(
                 (int)Math.Clamp(completed * 100L / totalUnits, 0, 100));
-        });
+        }, ct);
 
         progress?.Report(100);
     }
 
-    private void ErasePage(uint address)
+    private void ErasePage(uint address, CancellationToken ct)
     {
         EnsureIdle();
         byte[] command =
@@ -221,10 +238,10 @@ internal sealed class DfuDevice : IDisposable
             (byte)((address >> 24) & 0xFF)
         };
         _ = Control(Setup(0x21, RequestDnload, 0, (ushort)command.Length), command);
-        WaitDownloadIdle();
+        WaitDownloadIdle(ct);
     }
 
-    private void SetAddressPointer(uint address)
+    private void SetAddressPointer(uint address, CancellationToken ct = default)
     {
         byte[] command =
         {
@@ -235,22 +252,23 @@ internal sealed class DfuDevice : IDisposable
             (byte)((address >> 24) & 0xFF)
         };
         _ = Control(Setup(0x21, RequestDnload, 0, (ushort)command.Length), command);
-        WaitDownloadIdle();
+        WaitDownloadIdle(ct);
     }
 
-    private void WriteSegment(uint address, byte[] data, Action<int> onBytes)
+    private void WriteSegment(uint address, byte[] data, Action<int> onBytes, CancellationToken ct)
     {
         EnsureIdle();
-        SetAddressPointer(address);
+        SetAddressPointer(address, ct);
 
         int offset = 0;
         ushort block = 2;
         while (offset < data.Length)
         {
+            ct.ThrowIfCancellationRequested();
             int count = Math.Min(TransferSize, data.Length - offset);
             byte[] chunk = data.AsSpan(offset, count).ToArray();
             _ = Control(Setup(0x21, RequestDnload, block, (ushort)count), chunk);
-            WaitDownloadIdle();
+            WaitDownloadIdle(ct);
             offset += count;
             block++;
             onBytes(count);
@@ -259,16 +277,17 @@ internal sealed class DfuDevice : IDisposable
         EnsureIdle();
     }
 
-    private void VerifySegment(uint address, byte[] expected, Action<int> onBytes)
+    private void VerifySegment(uint address, byte[] expected, Action<int> onBytes, CancellationToken ct)
     {
         EnsureIdle();
-        SetAddressPointer(address);
+        SetAddressPointer(address, ct);
         EnsureIdle();
 
         int offset = 0;
         ushort block = 2;
         while (offset < expected.Length)
         {
+            ct.ThrowIfCancellationRequested();
             int count = Math.Min(TransferSize, expected.Length - offset);
             byte[] actual = new byte[count];
             uint transferred = Control(Setup(0xA1, RequestUpload, block, (ushort)count), actual);
@@ -318,17 +337,19 @@ internal sealed class DfuDevice : IDisposable
             throw new IOException($"Impossibile riportare DFU in IDLE (stato {s.State}).");
     }
 
-    private void WaitDownloadIdle()
+    private void WaitDownloadIdle(CancellationToken ct)
     {
         for (int i = 0; i < 200; i++)
         {
+            ct.ThrowIfCancellationRequested();
             DfuStatus s = GetStatus();
             if (s.State == DfuDownloadIdle || s.State == DfuIdle)
                 return;
             if (s.State == DfuError)
                 throw new IOException($"DFU errore 0x{s.Status:X2}.");
 
-            Thread.Sleep(Math.Clamp(s.PollTimeoutMs, 1, 5000));
+            if (ct.WaitHandle.WaitOne(Math.Clamp(s.PollTimeoutMs, 1, 5000)))
+                ct.ThrowIfCancellationRequested();
         }
 
         throw new TimeoutException("Timeout durante l'operazione DFU.");

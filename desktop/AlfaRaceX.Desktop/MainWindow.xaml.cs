@@ -19,15 +19,25 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, PreparedFirmware> _prepared = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _operation;
     private UpdateManifest? _manifest;
+    private int _manifestGeneration;
 
     public MainWindow()
     {
         InitializeComponent();
         DesktopPaths.Ensure();
         _history.Initialize();
+        int interrupted = _history.RecoverInterruptedOperations();
+        if (interrupted > 0)
+            _history.AddEvent("ERROR", "RECOVERY", $"Rilevate {interrupted} operazioni interrotte. Verificare log, backup e dispositivo; nessuna ripresa automatica.");
         _history.AddEvent("INFO", "APP", $"Avvio AlfaRaceX Desktop {AppVersion}.");
         Loaded += OnLoaded;
-        Closed += (_, _) => _operation?.Cancel();
+        Closing += (_, e) =>
+        {
+            if (_operation is null) return;
+            e.Cancel = true;
+            _operation.Cancel();
+            Post("error", new { message = "Annullamento richiesto. Attendi l'arresto dell'operazione prima di chiudere." });
+        };
     }
 
     private static string AppVersion =>
@@ -182,7 +192,8 @@ public partial class MainWindow : Window
             repository = "https://github.com/AriotaG/AlfaRaceX-Framework",
             disclaimerVersion = DisclaimerVersion,
             disclaimerAccepted = IsDisclaimerAccepted(),
-            disclaimerAcceptedUtc = _history.GetSetting("DisclaimerAcceptedUtc")
+            disclaimerAcceptedUtc = _history.GetSetting("DisclaimerAcceptedUtc"),
+            interruptedOperations = _history.CountInterruptedOperations()
         });
         await SendDashboardAsync();
         await SendManifestAsync(force: false);
@@ -192,9 +203,15 @@ public partial class MainWindow : Window
 
     private async Task SendDashboardAsync()
     {
-        int dfuCount;
+        int? dfuCount;
+        string? deviceError = null;
         try { dfuCount = await Task.Run(() => UsbDeviceEnumerator.FindDfuPaths().Count); }
-        catch { dfuCount = 0; }
+        catch (Exception ex)
+        {
+            dfuCount = null;
+            deviceError = ex.Message;
+            Log("ERROR", "USB", "Enumerazione USB fallita: " + ex.Message);
+        }
 
         string firmwareVersion = _manifest?.Version ?? "—";
         string channel = _manifest?.Channel ?? "Release Candidate";
@@ -204,6 +221,7 @@ public partial class MainWindow : Window
             firmwareVersion,
             channel,
             dfuCount,
+            deviceError,
             backupCount = _history.CountBackups(),
             preparedCount = _prepared.Count,
             dataRoot = DesktopPaths.Root
@@ -215,7 +233,15 @@ public partial class MainWindow : Window
         try
         {
             if (_manifest is null || force)
-                _manifest = await _updates.LoadManifestAsync(CancellationToken.None);
+            {
+                if (_operation is not null) return;
+                int generation = ++_manifestGeneration;
+                UpdateManifest candidate = await _updates.LoadManifestAsync(CancellationToken.None);
+                // A newer request or a started operation owns the current firmware state.
+                if (generation != _manifestGeneration || _operation is not null) return;
+                _prepared.Clear();
+                _manifest = candidate;
+            }
 
             Post("manifest", new
             {
@@ -243,6 +269,8 @@ public partial class MainWindow : Window
     {
         await RunExclusiveAsync("UPDATE", async ct =>
         {
+            ++_manifestGeneration;
+            _prepared.Clear();
             _manifest ??= await _updates.LoadManifestAsync(ct);
             var progress = new Progress<(string Message, int Progress)>(p =>
                 Post("operationProgress", new { kind = "prepare", message = p.Message, progress = p.Progress }));
@@ -270,7 +298,7 @@ public partial class MainWindow : Window
                 Post("operationProgress", new { kind = "flash", role, message = p.Message, progress = p.Progress }));
 
             Log("INFO", "FLASH", $"Avvio programmazione {role} firmware {_manifest?.Version}.");
-            await _updates.FlashAsync(firmware, progress, msg => Log("INFO", "DFU", msg), ct);
+            await _updates.FlashAsync(firmware, progress, msg => Log("INFO", "DFU", msg), ct, DesktopPaths.Backups, CatalogSafetyBackup);
             Log("INFO", "FLASH", $"Programmazione {role} completata e verificata.");
             Post("operationComplete", new { kind = "flash", role, message = $"{role} programmato e verificato." });
         });
@@ -326,11 +354,18 @@ public partial class MainWindow : Window
                 backup.BinPath,
                 progress,
                 msg => Log("INFO", "DFU", msg),
-                ct);
+                ct, backup.Sha256, DesktopPaths.Backups, CatalogSafetyBackup);
 
             Log("INFO", "RESTORE", $"Ripristino {backup.Role} completato e verificato.");
             Post("operationComplete", new { kind = "restore", role = backup.Role, message = $"Ripristino {backup.Role} completato." });
         });
+    }
+
+    private void CatalogSafetyBackup(BackupResult backup)
+    {
+        _history.AddBackup(backup.Role, backup.BinPath, backup.MetadataPath, backup.Sha256,
+            backup.Size, DateTime.UtcNow, "pre-write");
+        SendBackups();
     }
 
     private void ImportBackup(string role)
@@ -362,14 +397,18 @@ public partial class MainWindow : Window
         if (_operation is not null)
             throw new InvalidOperationException("È già in corso un'operazione. Attendi il completamento o annullala.");
 
+        string operationId = _history.BeginOperation(category);
         _operation = new CancellationTokenSource();
+        string outcome = "Failed";
         Post("busy", new { value = true, category });
         try
         {
             await work(_operation.Token);
+            outcome = "Completed";
         }
         catch (OperationCanceledException)
         {
+            outcome = "Cancelled";
             Log("WARN", category, "Operazione annullata.");
             Post("operationCancelled", new { category });
         }
@@ -380,10 +419,14 @@ public partial class MainWindow : Window
         }
         finally
         {
-            _operation.Dispose();
-            _operation = null;
-            Post("busy", new { value = false, category });
-            SendLogs();
+            try { _history.FinishOperation(operationId, outcome); }
+            finally
+            {
+                _operation.Dispose();
+                _operation = null;
+                Post("busy", new { value = false, category });
+                SendLogs();
+            }
         }
     }
 

@@ -166,8 +166,45 @@ try
         Reject(() => BackupRestoreService.SaveSnapshot("BH", dir, new byte[1]));
         if (Directory.Exists(dir)) throw new Exception("Incomplete backup published");
     });
+    AlfaRaceX.Desktop.DesktopPaths.TestRoot = Path.Combine(root, "desktop");
+    AlfaRaceX.Desktop.DesktopPaths.Ensure();
+    var history = new AlfaRaceX.Desktop.HistoryRepository(AlfaRaceX.Desktop.DesktopPaths.Database);
+    history.Initialize();
+    Test("SQLite setting survives reopen", () => {
+        history.SetSetting("test'key", "persisted' 123");
+        var reopened = new AlfaRaceX.Desktop.HistoryRepository(AlfaRaceX.Desktop.DesktopPaths.Database);
+        if (reopened.GetSetting("test'key") != "persisted' 123") throw new Exception("Setting lost");
+    });
+    Test("interrupted operation recovered once", () => {
+        history.BeginOperation("FLASH");
+        var reopened = new AlfaRaceX.Desktop.HistoryRepository(AlfaRaceX.Desktop.DesktopPaths.Database);
+        if (reopened.RecoverInterruptedOperations() != 1 || reopened.RecoverInterruptedOperations() != 0 || reopened.CountInterruptedOperations() != 1)
+            throw new Exception("Recovery state incorrect");
+    });
+    Test("completed failed cancelled operations not recovered", () => {
+        foreach (string status in new[] { "Completed", "Failed", "Cancelled" })
+            history.FinishOperation(history.BeginOperation("BACKUP"), status);
+        if (history.RecoverInterruptedOperations() != 0) throw new Exception("Finished operation recovered");
+    });
+    Test("clearing logs preserves operation journal", () => {
+        history.AddEvent("INFO", "TEST", "CI fixture"); history.ClearEvents();
+        if (history.GetEvents().Count != 0 || history.CountInterruptedOperations() != 1) throw new Exception("Journal erased with logs");
+    });
+    Test("USB path preserves native prefix on x64", () => {
+        string expected = @"\\?\usb#vid_0483&pid_df11#test";
+        byte[] bytes = System.Text.Encoding.Unicode.GetBytes(expected + "\0");
+        IntPtr buffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(bytes.Length + 4);
+        try {
+            System.Runtime.InteropServices.Marshal.WriteInt32(buffer, IntPtr.Size == 8 ? 8 : 6);
+            System.Runtime.InteropServices.Marshal.Copy(bytes, 0, IntPtr.Add(buffer, 4), bytes.Length);
+            if (UsbDeviceEnumerator.ReadDevicePath(buffer, (uint)(bytes.Length + 4)) != expected)
+                throw new Exception("Native device path truncated");
+            Reject(() => UsbDeviceEnumerator.ReadDevicePath(buffer, (uint)(bytes.Length + 2)));
+        } finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(buffer); }
+    });
+    DfuWorkflowTests.Run(Test, root, new PreparedFirmware(Manifest().Targets[0], "test-only", Load(upper, payload, eof)));
 }
-finally { Directory.Delete(root, true); }
+finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
 Console.WriteLine($"Failed: {failed}");
 return failed == 0 ? 0 : 1;
 // In-memory HTTP fixture: exercises download validation without a network or device.

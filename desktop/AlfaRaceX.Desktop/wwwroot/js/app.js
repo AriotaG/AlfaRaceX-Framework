@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const state = { page: 'dashboard', backupRole: 'BH', busy: false, appInfo: {}, backups: [], disclaimerAccepted: false };
+  const state = { page: 'dashboard', backupRole: 'BH', busy: false, appInfo: {}, backups: [], manifest: null, disclaimerAccepted: false };
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const host = (action, payload = {}) => window.chrome.webview.postMessage({ action, payload });
@@ -29,7 +29,15 @@
     $('metricBackups').textContent = d.backupCount ?? 0;
     $('metricApp').textContent = `v${d.appVersion || '—'}`;
     $('dataRoot').textContent = d.dataRoot || '—';
-    $('firmwareBadge').textContent = `Firmware ${d.firmwareVersion || '—'}`;
+    $('firmwareBadge').textContent = `Firmware disponibile ${d.firmwareVersion || '—'}`;
+    if (d.deviceError || d.dfuCount == null) {
+      $('metricDevice').textContent = 'Stato non disponibile';
+      $('sideStatus').textContent = 'Errore USB';
+      $('sideStatusDot').classList.remove('ok');
+      $('metricDeviceHint').textContent = d.deviceError || 'Enumerazione non completata';
+      return;
+    }
+    $('metricDeviceHint').textContent = 'Collega un solo modulo';
     const connected = Number(d.dfuCount) === 1;
     $('metricDevice').textContent = connected ? 'Rilevato' : (Number(d.dfuCount) > 1 ? `${d.dfuCount} rilevati` : 'Non rilevato');
     $('sideStatus').textContent = connected ? 'Modulo rilevato' : (Number(d.dfuCount) > 1 ? 'Più moduli' : 'Non rilevato');
@@ -37,17 +45,18 @@
   }
 
   function renderManifest(m) {
-    $('firmwareBadge').textContent = `Firmware ${m.version}`;
+    state.manifest = m;
+    $('firmwareBadge').textContent = `Firmware disponibile ${m.version}`;
     $('targets').innerHTML = (m.targets || []).map(t => `
       <article class="target-card ${t.prepared ? 'prepared' : ''}">
-        <span class="state-pill ${t.prepared ? 'ok' : ''}">${t.prepared ? 'VERIFICATO' : 'DA PREPARARE'}</span>
+        <span class="state-pill ${t.prepared ? 'ok' : ''}">${t.prepared ? 'SHA-256 OK' : 'DA PREPARARE'}</span>
         <h3>${esc(t.id)}</h3>
         <div class="port">${esc(t.label)} · ${esc(t.portHint)}</div>
         <div class="hash" title="${esc(t.sha256)}">SHA-256 ${esc(t.sha256)}</div>
         <button class="btn-arx flash-btn" data-role="${esc(t.id)}" ${t.prepared && !state.busy ? '' : 'disabled'}>Programma ${esc(t.id)}</button>
       </article>`).join('');
     document.querySelectorAll('.flash-btn').forEach(b => b.addEventListener('click', () => {
-      if (confirm(`Programmare il modulo ${b.dataset.role}?\n\nCollega un solo modulo in DFU e verifica di aver creato il backup.`))
+      if (confirm(`Programmare il modulo ${b.dataset.role}?\n\nCollega un solo modulo in DFU e verifica la porta fisica. Il ruolo MCU non è riconosciuto automaticamente. Verrà creato un backup prima della scrittura.`))
         host('flashRole', { role: b.dataset.role });
     }));
   }
@@ -83,7 +92,8 @@
     $('backupBtn').disabled = state.busy;
     $('importBtn').disabled = state.busy;
     $('cancelBtn').hidden = !state.busy;
-    document.querySelectorAll('.flash-btn,.restore').forEach(b => { if (state.busy) b.disabled = true; });
+    if (state.manifest) renderManifest(state.manifest);
+    renderBackups(state.backups);
   }
 
   window.chrome.webview.addEventListener('message', ev => {
@@ -98,6 +108,8 @@
         $('infoBackup').textContent = d.backupRoot;
         $('infoDb').textContent = d.database;
         $('disclaimerGate').hidden = state.disclaimerAccepted;
+        $('recoveryNotice').hidden = !(d.interruptedOperations > 0);
+        $('recoveryNotice').textContent = `Il registro contiene ${d.interruptedOperations || 0} operazioni interrotte senza esito. Consulta i log e verifica backup e dispositivo prima di nuove scritture. Nessuna operazione viene ripresa automaticamente.`;
         break;
       case 'disclaimerAccepted':
         state.disclaimerAccepted = true;
@@ -138,7 +150,7 @@
   $('refreshBtn').addEventListener('click', () => { host('refreshDashboard'); host('loadManifest'); });
   $('prepareBtn').addEventListener('click', () => host('prepareUpdate'));
   $('backupBtn').addEventListener('click', () => {
-    if (confirm(`Creare un backup completo del modulo ${state.backupRole}?\n\nCollega un solo modulo in DFU.`))
+    if (confirm(`Creare un backup della Flash interna del modulo ${state.backupRole}?\n\nCollega un solo modulo in DFU.`))
       host('createBackup', { role: state.backupRole });
   });
   $('openDataBtn').addEventListener('click', () => host('openDataFolder'));
