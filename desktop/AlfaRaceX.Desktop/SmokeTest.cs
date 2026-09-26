@@ -39,6 +39,10 @@ internal static class SmokeTest
         try
         {
             if (Run() != 0) throw new InvalidOperationException("Prerequisiti UI smoke non verificati; consultare stderr.");
+            var workArea = System.Windows.SystemParameters.WorkArea;
+            if (window.Width > workArea.Width || window.Height > workArea.Height ||
+                window.MinWidth > workArea.Width || window.MinHeight > workArea.Height)
+                throw new InvalidOperationException("Dimensioni iniziali finestra fuori dall'area di lavoro.");
             var deadline = DateTime.UtcNow.AddSeconds(30);
             while (window.Browser.CoreWebView2 is null ||
                 await window.Browser.ExecuteScriptAsync("document.getElementById('infoVersion')?.textContent?.startsWith('v') === true") != "true")

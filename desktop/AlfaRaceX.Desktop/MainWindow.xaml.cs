@@ -23,6 +23,16 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // WPF work-area coordinates exclude the taskbar and follow system scaling.
+        // Start on the primary work area, including displays smaller than the design size.
+        Rect workArea = SystemParameters.WorkArea;
+        MinWidth = Math.Min(MinWidth, workArea.Width);
+        MinHeight = Math.Min(MinHeight, workArea.Height);
+        Width = Math.Min(Width, workArea.Width);
+        Height = Math.Min(Height, workArea.Height);
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Left = workArea.Left + (workArea.Width - Width) / 2;
+        Top = workArea.Top + (workArea.Height - Height) / 2;
         InitializeDeviceNotifications();
         DesktopPaths.Ensure();
         _history.Initialize();
