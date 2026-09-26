@@ -39,6 +39,9 @@ public partial class MainWindow : Window
         {
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: DesktopPaths.WebView2);
             await Browser.EnsureCoreWebView2Async(environment);
+            Browser.CoreWebView2.ProcessFailed += (_, failure) =>
+                _history.AddEvent("ERROR", "WEBVIEW2",
+                    $"Processo {failure.ProcessFailedKind}, motivo {failure.Reason}, exit {failure.ExitCode}: {failure.ProcessDescription}");
 
             string webRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
             if (!Directory.Exists(webRoot))
@@ -58,6 +61,7 @@ public partial class MainWindow : Window
             Browser.CoreWebView2.NavigationStarting += (_, args) =>
             {
                 if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out Uri? uri) ||
+                    uri.Scheme != "https" || !uri.IsDefaultPort ||
                     !string.Equals(uri.Host, UiHost, StringComparison.OrdinalIgnoreCase))
                     args.Cancel = true;
             };
@@ -81,6 +85,9 @@ public partial class MainWindow : Window
     {
         try
         {
+            if (!Uri.TryCreate(e.Source, UriKind.Absolute, out var source) ||
+                source.Scheme != "https" || source.Host != UiHost || !source.IsDefaultPort)
+                throw new InvalidOperationException("Origine messaggio UI non autorizzata.");
             using JsonDocument doc = JsonDocument.Parse(e.WebMessageAsJson);
             JsonElement root = doc.RootElement;
             string action = root.TryGetProperty("action", out JsonElement a) ? a.GetString() ?? "" : "";
@@ -430,8 +437,14 @@ public partial class MainWindow : Window
         Post("log", new { createdUtc = DateTime.UtcNow, level, category, message });
     }
 
-    private void Post(string type, object data)
+    internal void Post(string type, object data)
     {
+        if (Dispatcher.HasShutdownStarted) return;
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => Post(type, data));
+            return;
+        }
         if (Browser.CoreWebView2 is null)
             return;
         string json = JsonSerializer.Serialize(new { type, data });

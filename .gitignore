@@ -3,6 +3,8 @@
 /out/
 **/bin/
 **/obj/
+/desktop/AlfaRaceX.Desktop/node_modules/
+/desktop/AlfaRaceX.Desktop/wwwroot/vendor/
 *.o
 *.obj
 *.elf
