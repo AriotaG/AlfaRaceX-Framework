@@ -9,7 +9,7 @@ int main(void){
     for(unsigned round=0;round<10000;round++){
         for(unsigned i=0;i<ARX_INGRESS_CAPACITY;i++){
             e.kind=(ArxIngressKind)(i%ARX_INGRESS_KIND_COUNT);e.timestamp_ms=round*16+i;
-            e.length=64;memset(e.data.bytes,(int)i,64);
+            e.length=24;memset(e.data.bytes,(int)i,24);
             CHECK(arx_ingress_push(&q,&e));
             e.data.bytes[0]=255; /* Hardware buffer reuse must not alter queued data. */
         }
@@ -18,7 +18,7 @@ int main(void){
         for(unsigned i=0;i<ARX_INGRESS_CAPACITY;i++){
             CHECK(arx_ingress_pop(&q,&out));
             CHECK(out.timestamp_ms==round*16+i && out.kind==(ArxIngressKind)(i%4));
-            CHECK(out.length==64 && out.data.bytes[0]==i && out.data.bytes[63]==i);
+            CHECK(out.length==24 && out.data.bytes[0]==i && out.data.bytes[23]==i);
         }
     }
     e.length=65;CHECK(!arx_ingress_push(&q,&e));

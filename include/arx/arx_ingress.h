@@ -4,12 +4,14 @@
 #include <stdbool.h>
 #define ARX_INGRESS_CAPACITY 16u
 #define ARX_INGRESS_USB_SIZE 64u
+#define ARX_INGRESS_INLINE_SIZE 24u
 typedef enum { ARX_INGRESS_CAN, ARX_INGRESS_INTERCHIP, ARX_INGRESS_PEDAL, ARX_INGRESS_USB, ARX_INGRESS_KIND_COUNT } ArxIngressKind;
 typedef struct {
     ArxIngressKind kind;
     uint32_t timestamp_ms;
     uint8_t length;
-    union { ArxCanFrame can; uint8_t bytes[ARX_INGRESS_USB_SIZE]; } data;
+    /* USB packet storage is held separately until its event has been processed. */
+    union { ArxCanFrame can; uint8_t bytes[ARX_INGRESS_INLINE_SIZE]; } data;
 } ArxIngressEvent;
 typedef struct {
     ArxIngressEvent events[ARX_INGRESS_CAPACITY];

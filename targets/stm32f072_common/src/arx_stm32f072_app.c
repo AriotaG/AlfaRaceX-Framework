@@ -17,6 +17,8 @@ extern UART_HandleTypeDef *arx_stm32_pedal_uart_handle(void);
 
 static ArxRuntime runtime_ctx;
 static ArxIngressQueue ingress;
+static uint8_t usb_ingress_data[ARX_INGRESS_USB_SIZE];
+static volatile bool usb_ingress_pending;
 
 static bool enqueue_ingress(const ArxIngressEvent *event) {
     const uint32_t mask=__get_PRIMASK();
@@ -38,7 +40,10 @@ static void drain_ingress(void) {
             case ARX_INGRESS_CAN: arx_runtime_on_can(&runtime_ctx,&event.data.can,event.timestamp_ms);break;
             case ARX_INGRESS_INTERCHIP: arx_runtime_on_interchip(&runtime_ctx,event.data.bytes,event.timestamp_ms);break;
             case ARX_INGRESS_PEDAL: arx_runtime_on_pedal_reply(&runtime_ctx,event.data.bytes[0]);break;
-            case ARX_INGRESS_USB: arx_runtime_usb_rx(&runtime_ctx,event.data.bytes,event.length,event.timestamp_ms);break;
+            case ARX_INGRESS_USB:
+                arx_runtime_usb_rx(&runtime_ctx,usb_ingress_data,event.length,event.timestamp_ms);
+                usb_ingress_pending=false;
+                break;
             default: break;
         }
     }
@@ -420,9 +425,17 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
 
 bool arx_stm32f072_usb_rx(const uint8_t *data,size_t length) {
     if(!data||length==0u||length>ARX_INGRESS_USB_SIZE)return false;
+    const uint32_t mask=__get_PRIMASK();
+    __disable_irq();
+    if(usb_ingress_pending){__set_PRIMASK(mask);return false;}
     ArxIngressEvent event={.kind=ARX_INGRESS_USB,.timestamp_ms=HAL_GetTick(),.length=(uint8_t)length};
-    memcpy(event.data.bytes,data,length);
-    return enqueue_ingress(&event);
+    const bool queued=arx_ingress_push(&ingress,&event);
+    if(queued){
+        memcpy(usb_ingress_data,data,length);
+        usb_ingress_pending=true;
+    }
+    __set_PRIMASK(mask);
+    return queued;
 }
 
 void arx_stm32f072_app_loop(void) {
