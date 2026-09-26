@@ -21,10 +21,15 @@ internal sealed class BackupMetadata
     public int FlashSize { get; set; }
     public string Sha256 { get; set; } = "";
     public string FileName { get; set; } = "";
+    public string RoleEvidence { get; set; } = "user-selected; physical MCU role not verified";
+    public string Scope { get; set; } = "internal-flash-only; excludes option bytes, OTP and system ROM";
 }
 
 internal sealed class BackupRestoreService
 {
+    private readonly Func<IDfuDevice> _openDevice;
+    public BackupRestoreService(Func<IDfuDevice>? openDevice = null) => _openDevice = openDevice ?? (() => DfuDevice.OpenSingle());
+
     public const uint FlashStart = 0x08000000u;
     public const int FlashSize = 0x20000;
 
@@ -45,7 +50,7 @@ internal sealed class BackupRestoreService
             Directory.CreateDirectory(destinationFolder);
 
             progress.Report(($"Connessione DFU {role}...", 0));
-            using var dfu = DfuDevice.OpenSingle();
+            using var dfu = _openDevice();
 
             log($"Backup {role}: lettura completa Flash interna.");
             var readProgress = new Progress<int>(p =>
@@ -57,42 +62,77 @@ internal sealed class BackupRestoreService
                 readProgress,
                 ct);
 
-            string hash = Convert.ToHexString(
-                SHA256.HashData(data)).ToLowerInvariant();
-
-            string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-            string binName = $"AlfaRaceX-{role}-backup-{stamp}.bin";
-            string binPath = Path.Combine(destinationFolder, binName);
-            File.WriteAllBytes(binPath, data);
-
-            var metadata = new BackupMetadata
-            {
-                Role = role,
-                UpdaterVersion = AppConstants.UpdaterVersion,
-                CreatedUtc = DateTime.UtcNow,
-                FlashStart = FlashStart,
-                FlashSize = FlashSize,
-                Sha256 = hash,
-                FileName = binName
-            };
-
-            string metadataPath = Path.ChangeExtension(binPath, ".json");
-            File.WriteAllText(
-                metadataPath,
-                JsonSerializer.Serialize(
-                    metadata,
-                    new JsonSerializerOptions { WriteIndented = true }));
-
-            log($"Backup {role}: SHA-256 {hash}.");
+            BackupResult result = SaveSnapshot(role, destinationFolder, data);
+            log($"Backup {role}: SHA-256 {result.Sha256}.");
             progress.Report(($"Backup {role} completato.", 100));
-
-            return new BackupResult(
-                role,
-                binPath,
-                metadataPath,
-                hash,
-                data.Length);
+            return result;
         }, ct);
+    }
+
+    // Saves the bytes already read from the device. This does not prove physical MCU identity.
+    internal static BackupResult SaveSnapshot(string role, string destinationFolder, byte[] data)
+    {
+        role = NormalizeRole(role);
+        if (data.Length != FlashSize)
+            throw new InvalidDataException($"Backup incompleto: attesi {FlashSize} byte, trovati {data.Length}.");
+        Directory.CreateDirectory(destinationFolder);
+        string hash = Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
+        DateTime created = DateTime.UtcNow;
+        string name = $"AlfaRaceX-{role}-backup-{created:yyyyMMdd-HHmmss-fffffff}-{Guid.NewGuid():N}.bin";
+        string binPath = Path.Combine(destinationFolder, name);
+        using (var file = new FileStream(binPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        {
+            file.Write(data);
+            file.Flush(flushToDisk: true);
+        }
+        using (var saved = File.OpenRead(binPath))
+        {
+            if (!string.Equals(Convert.ToHexString(SHA256.HashData(saved)), hash, StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Verifica del backup scritto su disco fallita.");
+        }
+        var metadata = new BackupMetadata
+        {
+            Role = role, UpdaterVersion = AppConstants.UpdaterVersion, CreatedUtc = created,
+            FlashStart = FlashStart, FlashSize = data.Length, Sha256 = hash, FileName = name
+        };
+        string metadataPath = Path.ChangeExtension(binPath, ".json");
+        using (var file = new FileStream(metadataPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        {
+            JsonSerializer.Serialize(file, metadata, new JsonSerializerOptions { WriteIndented = true });
+            file.Flush(flushToDisk: true);
+        }
+        return new BackupResult(role, binPath, metadataPath, hash, data.Length);
+    }
+
+    // Import owns a verified copy; removable source media is never a catalog dependency.
+    internal static BackupResult ImportSnapshot(string role, string sourcePath, string destinationFolder)
+    {
+        role = NormalizeRole(role);
+        var (data, _) = ReadValidatedSnapshot(role, sourcePath, null, requireIntegrity: false);
+        return SaveSnapshot(role, destinationFolder, data);
+    }
+
+    private static (byte[] Data, string Hash) ReadValidatedSnapshot(
+        string role, string binPath, string? expectedSha256, bool requireIntegrity)
+    {
+        // Keep memory bounded and deny concurrent writes while taking the snapshot.
+        using var input = new FileStream(binPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        if (input.Length != FlashSize)
+            throw new InvalidDataException($"Backup non valido: attesi {FlashSize} byte, trovati {input.Length}.");
+        byte[] data = new byte[FlashSize];
+        input.ReadExactly(data);
+        if (input.ReadByte() != -1)
+            throw new InvalidDataException("Dimensione del backup cambiata durante la lettura.");
+        string? detectedRole = DetectRole(binPath);
+        if (detectedRole is not null && !string.Equals(role, detectedRole, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Il backup risulta associato al modulo {detectedRole}, ma hai selezionato {role}.");
+        string hash = Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
+        if (requireIntegrity && expectedSha256 is null && !File.Exists(Path.ChangeExtension(binPath, ".json")))
+            throw new InvalidDataException("Ripristino rifiutato: manca un hash registrato o un metadato di integrità.");
+        if (expectedSha256 is not null && !string.Equals(hash, expectedSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Il backup è cambiato dopo la catalogazione. Ripristino rifiutato.");
+        VerifyMetadataIfPresent(role, binPath, hash);
+        return (data, hash);
     }
 
     public Task RestoreAsync(
@@ -100,39 +140,22 @@ internal sealed class BackupRestoreService
         string binPath,
         IProgress<(string Message, int Progress)> progress,
         Action<string> log,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? expectedSha256 = null,
+        string? safetyBackupFolder = null,
+        Action<BackupResult>? backupCreated = null)
     {
         role = NormalizeRole(role);
 
         return Task.Run(() =>
         {
-            if (!File.Exists(binPath))
-                throw new FileNotFoundException(
-                    "Il file di backup selezionato non esiste.",
-                    binPath);
-
-            byte[] data = File.ReadAllBytes(binPath);
-            if (data.Length != FlashSize)
-                throw new InvalidDataException(
-                    $"Backup non valido: attesi {FlashSize} byte, trovati {data.Length}.");
-
-            string? detectedRole = DetectRole(binPath);
-            if (!string.IsNullOrWhiteSpace(detectedRole) &&
-                !string.Equals(role, detectedRole, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidDataException(
-                    $"Il backup risulta associato al modulo {detectedRole}, " +
-                    $"ma hai selezionato {role}.");
-            }
-
-            string hash = Convert.ToHexString(
-                SHA256.HashData(data)).ToLowerInvariant();
-
-            VerifyMetadataIfPresent(role, binPath, hash);
+            var (data, hash) = ReadValidatedSnapshot(role, binPath, expectedSha256, requireIntegrity: true);
 
             progress.Report(($"Connessione DFU {role}...", 0));
-            using var dfu = DfuDevice.OpenSingle();
+            using var dfu = _openDevice();
 
+            CaptureSafetyBackup(dfu, role, safetyBackupFolder, log, ct, backupCreated);
+            ct.ThrowIfCancellationRequested();
             log($"Ripristino {role}: SHA-256 {hash}.");
             var restoreProgress = new Progress<int>(p =>
                 progress.Report(($"Ripristino {role}: programmazione e verifica...", p)));
@@ -149,13 +172,27 @@ internal sealed class BackupRestoreService
             {
                 dfu.Leave(FlashStart);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
-                log($"{role}: disconnessione dopo comando di avvio.");
+                log($"{role}: Flash verificata; riavvio non confermato: {ex.Message}");
             }
 
             progress.Report(($"Ripristino {role} completato.", 100));
         }, ct);
+    }
+
+    internal static BackupResult CaptureSafetyBackup(IDfuDevice device, string role, string? folder,
+        Action<string> log, CancellationToken ct, Action<BackupResult>? backupCreated)
+    {
+        ct.ThrowIfCancellationRequested();
+        folder ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AlfaRaceX", "Backups");
+        log($"Backup preventivo {role}: lettura prima di ogni cancellazione Flash.");
+        byte[] data = device.ReadMemory(FlashStart, FlashSize, null, ct);
+        ct.ThrowIfCancellationRequested();
+        BackupResult backup = SaveSnapshot(role, folder, data);
+        backupCreated?.Invoke(backup);
+        log($"Backup preventivo verificato: {backup.BinPath}; SHA-256 {backup.Sha256}.");
+        return backup;
     }
 
     private static void VerifyMetadataIfPresent(
@@ -167,8 +204,15 @@ internal sealed class BackupRestoreService
         if (!File.Exists(metadataPath))
             return;
 
-        BackupMetadata? metadata = JsonSerializer.Deserialize<BackupMetadata>(
-            File.ReadAllText(metadataPath));
+        BackupMetadata? metadata;
+        try
+        {
+            metadata = JsonSerializer.Deserialize<BackupMetadata>(File.ReadAllText(metadataPath));
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException($"Metadati backup JSON non validi: {metadataPath}.", ex);
+        }
 
         if (metadata is null)
             throw new InvalidDataException("Metadati backup non validi.");

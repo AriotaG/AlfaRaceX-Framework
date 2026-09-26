@@ -10,6 +10,16 @@ permissions:
   contents: read
 
 jobs:
+  firmware-file-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Validate firmware file parsing
+        run: dotnet run --project tests/AlfaRaceX.HostTests -c Release
+
   host-tests:
     runs-on: ubuntu-latest
     strategy:
@@ -73,6 +83,8 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
       - name: Build and enforce memory budget
         run: cmake --build build-target --parallel
+      - name: Report compiler stack frames
+        run: python3 tools/release/report_stack_usage.py build-target --output build-target/stack-usage.txt
       - name: Upload image artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -82,3 +94,5 @@ jobs:
             build-target/arx_${{ matrix.role }}.hex
             build-target/arx_${{ matrix.role }}.bin
             build-target/arx_${{ matrix.role }}.map
+            build-target/stack-usage.txt
+            build-target/**/*.su

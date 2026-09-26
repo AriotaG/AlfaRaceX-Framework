@@ -38,6 +38,8 @@ internal static class UsbDeviceEnumerator
 
                 _ = WinUsbNative.SetupDiGetDeviceInterfaceDetail(
                     set, ref data, IntPtr.Zero, 0, out uint required, IntPtr.Zero);
+                if (required < 6 || required > int.MaxValue)
+                    throw new IOException("Dimensione del percorso USB non valida.");
 
                 IntPtr detail = Marshal.AllocHGlobal((int)required);
                 try
@@ -47,8 +49,7 @@ internal static class UsbDeviceEnumerator
                         set, ref data, detail, required, out _, IntPtr.Zero))
                         WinUsbNative.ThrowLast("Lettura percorso USB fallita.");
 
-                    IntPtr pathPtr = IntPtr.Add(detail, IntPtr.Size == 8 ? 8 : 4);
-                    string path = Marshal.PtrToStringUni(pathPtr) ?? "";
+                    string path = ReadDevicePath(detail, required);
                     string lower = path.ToLowerInvariant();
 
                     string vid = $"vid_{AppConstants.DfuVendorId:x4}";
@@ -70,5 +71,17 @@ internal static class UsbDeviceEnumerator
         {
             WinUsbNative.SetupDiDestroyDeviceInfoList(set);
         }
+    }
+
+    internal static string ReadDevicePath(IntPtr detail, uint size)
+    {
+        if (detail == IntPtr.Zero || size < 6 || size > int.MaxValue)
+            throw new InvalidDataException("Buffer percorso USB non valido.");
+        // DWORD cbSize precedes WCHAR DevicePath[] on both architectures.
+        // cbSize is 8 on x64; it is not the offset of DevicePath (4).
+        string buffer = Marshal.PtrToStringUni(IntPtr.Add(detail, 4), checked((int)(size - 4) / 2))!;
+        int end = buffer.IndexOf('\0');
+        if (end < 0) throw new InvalidDataException("Percorso USB non terminato.");
+        return buffer[..end];
     }
 }

@@ -142,8 +142,19 @@ static void elm_usb_hex_id(ArxRuntime *rt,uint32_t id,bool extended) {
     (void)elm_usb_queue(rt,out,digits);
 }
 
-static void elm_usb_emit_event(ArxRuntime *rt,const ArxElmRxEvent *event) {
-    if(!rt||!event)return;
+static bool elm_usb_emit_event(ArxRuntime *rt,const ArxElmRxEvent *event) {
+    if(!rt||!event)return false;
+    /* Reserve the entire formatted response plus final prompt before emitting
+       any byte. An unconsumed USB queue must not turn truncation into success. */
+    const size_t line_end=rt->elm.linefeeds?2u:1u;
+    const size_t required=(rt->elm.headers?(event->extended_id?9u:4u):0u)+
+        2u*event->length+(rt->elm.spaces&&event->length?event->length-1u:0u)+
+        2u*line_end+1u;
+    elm_usb_compact(rt);
+    if(required>sizeof(rt->elm_usb_tx)-rt->elm_usb_tx_len){
+        rt->elm_output_overflow=true;
+        return false;
+    }
     if(rt->elm.headers){
         elm_usb_hex_id(rt,event->can_id,event->extended_id);
         (void)elm_usb_text(rt," ");
@@ -153,6 +164,7 @@ static void elm_usb_emit_event(ArxRuntime *rt,const ArxElmRxEvent *event) {
         if(rt->elm.spaces&&i+1u<event->length)(void)elm_usb_text(rt," ");
     }
     elm_usb_line_end(rt);
+    return true;
 }
 
 static void elm_usb_no_data(ArxRuntime *rt) {
@@ -220,6 +232,11 @@ static bool elm_arm_remote(
 static bool elm_start_candidate(ArxRuntime *rt,uint32_t now_ms) {
     if(!rt||rt->elm_candidate_index>=rt->elm_candidate_count)return false;
     const ArxElmBus candidate=rt->elm_candidates[rt->elm_candidate_index];
+
+    /* Reserve the configuration, arm and request slots together. Runtime ingress
+       is serialized, so no interrupt can consume this space during construction. */
+    if(candidate!=ARX_ELM_BUS_C1 &&
+       rt->interchip.tx.count>ARX_INTERCHIP_QUEUE_SIZE-3u)return false;
 
     if(!elm_arm_remote(rt,candidate,now_ms))return false;
 
@@ -297,8 +314,8 @@ static void elm_handle_response(
     if(kind==ARX_ELM_RX_PENDING)return;
 
     if(kind==ARX_ELM_RX_RAW_FRAME||kind==ARX_ELM_RX_PAYLOAD){
-        elm_usb_emit_event(rt,&event);
-        elm_finish_request(rt,true);
+        const bool emitted=elm_usb_emit_event(rt,&event);
+        elm_finish_request(rt,emitted);
         return;
     }
 
@@ -313,18 +330,30 @@ static void elm_tick(ArxRuntime *rt,uint32_t now_ms) {
         return;
     }
 
+    if((int32_t)(now_ms-rt->elm_deadline_ms)>=0){
+        (void)elm_try_next_candidate(rt,now_ms);
+        return;
+    }
+    const ArxElmBus target=rt->elm_candidates[rt->elm_candidate_index];
+    const bool room=target==ARX_ELM_BUS_C1
+        ?rt->can_tx.queues[ARX_PRIORITY_HIGH].count<ARX_CAN_QUEUE_CAPACITY
+        :rt->interchip.tx.count<ARX_INTERCHIP_QUEUE_SIZE;
     ArxCanFrame next;
-    if(arx_elm_transaction_next_tx(&rt->elm_transaction,now_ms,&next)){
-        const ArxElmBus target=rt->elm_candidates[rt->elm_candidate_index];
+    if(room&&arx_elm_transaction_next_tx(&rt->elm_transaction,now_ms,&next)){
         (void)elm_send_frame(rt,&next,target,now_ms);
     }
-
-    if((int32_t)(now_ms-rt->elm_deadline_ms)>=0)
-        (void)elm_try_next_candidate(rt,now_ms);
 }
 
 static void elm_process_line(ArxRuntime *rt,uint32_t now_ms) {
     if(!rt||rt->elm_line_len==0u)return;
+    elm_usb_compact(rt);
+    /* Covers command echo, the largest AT reply and error/prompt framing. */
+    if(rt->elm_output_overflow||sizeof(rt->elm_usb_tx)-rt->elm_usb_tx_len<
+       sizeof(rt->elm_line)+192u+8u){
+        rt->elm_output_overflow=true;
+        rt->elm_line_len=0u;
+        return;
+    }
     rt->elm_line[rt->elm_line_len]='\0';
 
     if(rt->elm.echo){
@@ -336,17 +365,17 @@ static void elm_process_line(ArxRuntime *rt,uint32_t now_ms) {
     while(*p==' '||*p=='\t')p++;
     const bool at=(p[0]=='A'||p[0]=='a')&&(p[1]=='T'||p[1]=='t');
 
-    if(at){
-        char reply[192];
-        const size_t n=arx_elm327_command(&rt->elm,p,reply,sizeof(reply));
-        (void)elm_usb_queue(rt,reply,n);
+    if(rt->elm_request_active){
+        (void)elm_usb_text(rt,"BUS BUSY");
+        elm_usb_prompt(rt);
         rt->elm_line_len=0u;
         return;
     }
 
-    if(rt->elm_request_active){
-        (void)elm_usb_text(rt,"BUS BUSY");
-        elm_usb_prompt(rt);
+    if(at){
+        char reply[192];
+        const size_t n=arx_elm327_command(&rt->elm,p,reply,sizeof(reply));
+        (void)elm_usb_queue(rt,reply,n);
         rt->elm_line_len=0u;
         return;
     }
@@ -704,7 +733,8 @@ static void telemetry_accept_response(
 }
 
 static void telemetry_poll_current_page(ArxRuntime *rt,uint32_t now_ms) {
-    if(!rt||!rt->config.diesel_profile||!rt->menu.visible||
+    if(!rt||rt->elm_request_active||!rt->config.telemetry_enabled||!rt->config.diagnostics_enabled||
+       !rt->config.diesel_profile||!rt->menu.visible||
        rt->menu.level!=ARX_MENU_LEVEL_SUB||rt->menu.main_page!=1u)return;
     if(rt->telemetry_last_poll_ms&&now_ms-rt->telemetry_last_poll_ms<500u)return;
     rt->telemetry_last_poll_ms=now_ms;
@@ -1715,6 +1745,10 @@ static void periodic_usb(ArxRuntime *rt,uint32_t now_ms) {
 #if ARX_COMPILE_C1
     if(rt->role==ARX_RUNTIME_C1){
         elm_tick(rt,now_ms);
+        if(rt->elm_output_overflow){
+            const char *error=rt->elm.linefeeds?"\r\nBUFFER FULL\r\n>":"\rBUFFER FULL\r>";
+            if(elm_usb_text(rt,error))rt->elm_output_overflow=false;
+        }
         if(rt->ops.usb_send&&
            rt->usb_mode.mode==ARX_USB_MODE_DIAGNOSTIC&&
            rt->usb_mode.state==ARX_USB_CONFIGURED&&
@@ -1808,7 +1842,7 @@ size_t arx_runtime_drain_interchip(ArxRuntime *rt,uint32_t now_ms,size_t budget)
     while(sent<budget){
         uint8_t diag_offset=0u;
         if(interchip_diag_offset(&rt->interchip.tx,&diag_offset)){
-            if(now_ms<rt->interchip.boot_ignore_ms)break;
+            if(!arx_interchip_ready(&rt->interchip,now_ms))break;
             const uint8_t index=(uint8_t)(
                 (rt->interchip.tx.head+diag_offset)%ARX_INTERCHIP_QUEUE_SIZE
             );

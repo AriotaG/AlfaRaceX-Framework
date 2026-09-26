@@ -26,6 +26,15 @@ int main(void) {
     const ArxStm32TargetProfile *bh=arx_stm32_profile(ARX_TARGET_ROLE_BH);
 
     assert(c1 && c2 && bh);
+    assert(!arx_stm32_storage_address_valid(0x08000000u,true));
+    assert(!arx_stm32_storage_address_valid(0x0801DFFFu,false));
+    assert(!arx_stm32_storage_address_valid(0x08020000u,false));
+    assert(!arx_stm32_storage_address_valid(UINT32_MAX,false));
+    assert(arx_stm32_storage_address_valid(ARX_STM32_LOG_PAGE_ADDRESS,true));
+    assert(arx_stm32_storage_address_valid(ARX_STM32_SETTINGS_PAGE_ADDRESS,true));
+    assert(!arx_stm32_storage_address_valid(ARX_STM32_SETTINGS_PAGE_ADDRESS+2u,true));
+    assert(!arx_stm32_storage_address_valid(ARX_STM32_SETTINGS_PAGE_ADDRESS+1u,false));
+    assert(arx_stm32_storage_address_valid(0x0801FFFEu,false));
     assert(c1->can_bitrate==500000u && c1->can_prescaler==12u);
     assert(c2->can_bitrate==500000u && c2->can_prescaler==12u);
     assert(bh->can_bitrate==125000u && bh->can_prescaler==48u);

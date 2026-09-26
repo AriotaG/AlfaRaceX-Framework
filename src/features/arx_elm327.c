@@ -403,10 +403,14 @@ size_t arx_elm327_command(ArxElm327 *f,const char *command,char *reply,size_t ca
 
 bool arx_elm327_prepare_request(const ArxElm327 *f,const char *hex,ArxElmRequest *r) {
     if(!f||!hex||!r) return false;
-    char cmd[(ARX_ELM_MAX_PAYLOAD*2u)+1u]={0};
-    if(!compact_upper(hex,cmd,sizeof(cmd))) return false;
-    size_t n=strlen(cmd);
-    if(n==0u||(n%2u)!=0u||n>(ARX_ELM_MAX_PAYLOAD*2u)) return false;
+    /* Validate before touching the output, without a 511-byte stack copy. */
+    size_t n=0u;
+    for(const char *p=hex;*p;p++){
+        const char c=*p;
+        if(c==' '||c=='\r'||c=='\n'||c=='\t')continue;
+        if(hexn(upper_ascii(c))<0||++n>ARX_ELM_MAX_PAYLOAD*2u)return false;
+    }
+    if(n==0u||(n%2u)!=0u||(!f->auto_format&&n>16u))return false;
 
     memset(r,0,sizeof(*r));
     r->can_id=f->tx_header;
@@ -414,12 +418,16 @@ bool arx_elm327_prepare_request(const ArxElm327 *f,const char *hex,ArxElmRequest
     r->auto_format=f->auto_format;
     r->auto_flow_control=f->auto_flow_control;
 
-    if(!f->auto_format && n>16u) return false;
-
-    for(size_t i=0;i<n;i+=2u) {
-        int a=hexn(cmd[i]),b=hexn(cmd[i+1u]);
-        if(a<0||b<0) return false;
-        r->data[r->length++]=(uint8_t)((a<<4)|b);
+    int high=-1;
+    for(const char *p=hex;*p;p++){
+        const char c=*p;
+        if(c==' '||c=='\r'||c=='\n'||c=='\t')continue;
+        const int digit=hexn(upper_ascii(c));
+        if(high<0)high=digit;
+        else{
+            r->data[r->length++]=(uint8_t)((high<<4)|digit);
+            high=-1;
+        }
     }
     return true;
 }

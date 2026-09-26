@@ -162,7 +162,7 @@ float arx_storage_read_best_seconds(
     const ArxStorageBackend *b,
     uint8_t index
 ) {
-    if(!b||!b->read_halfword||index<1u) return 0.0f;
+    if(!b||!b->read_halfword||index<1u||index>2u) return 0.0f;
     uint16_t raw=b->read_halfword(
         ARX_STORAGE_STATS_ADDR+(uint32_t)(index-1u)*4u,b->user
     );
@@ -175,7 +175,9 @@ bool arx_storage_write_best_seconds(
     float hundred_to_200_s
 ) {
     if(!valid_backend(b)) return false;
-    if(zero_to_100_s<0.0f || hundred_to_200_s<0.0f) return false;
+    /* Validate before float-to-integer conversion (NaN/Inf/out-of-range are undefined). */
+    if(!(zero_to_100_s>=0.0f&&zero_to_100_s<=65.535f)||
+       !(hundred_to_200_s>=0.0f&&hundred_to_200_s<=65.535f)) return false;
 
     uint32_t a=(uint32_t)(zero_to_100_s*1000.0f+0.5f);
     uint32_t c=(uint32_t)(hundred_to_200_s*1000.0f+0.5f);

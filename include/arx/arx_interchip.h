@@ -102,6 +102,8 @@ typedef struct {
     uint32_t last_master_request_ms;
     uint32_t last_c2_status_request_ms;
     uint32_t last_bh_status_request_ms;
+    bool boot_complete;
+    bool reply_window_open;
 } ArxInterchip;
 
 void arx_interchip_init(ArxInterchip *link, ArxInterchipRole role);
@@ -131,8 +133,10 @@ void arx_interchip_note_master_request(
     uint32_t now_ms
 );
 
+bool arx_interchip_ready(ArxInterchip *link, uint32_t now_ms);
+
 bool arx_interchip_tx_allowed(
-    const ArxInterchip *link,
+    ArxInterchip *link,
     uint32_t now_ms
 );
 
