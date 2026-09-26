@@ -377,6 +377,9 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    /* ST HAL may call RxCplt from RxISR before ErrorCallback when the last
+       character has a framing/noise/parity error. Never dispatch that frame. */
+    if(huart->ErrorCode!=HAL_UART_ERROR_NONE)return;
     if(huart==arx_stm32_interchip_uart_handle()){
         if(!uart2_sync_obtained){
             if(arx_interchip_start_byte_valid(uart2_rx[0])){
@@ -411,6 +414,9 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
     if(huart==arx_stm32_interchip_uart_handle()){
+        /* Non-blocking HAL errors leave RxState BUSY_RX: abort the partial
+           transfer before rearming, otherwise Receive_IT returns HAL_BUSY. */
+        (void)HAL_UART_AbortReceive(huart);
         (void)HAL_HalfDuplex_EnableReceiver(huart);
         interchip_rx_arm_search();
         return;
@@ -418,6 +424,7 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
 
     if(target_role==ARX_TARGET_ROLE_C1&&
        huart==arx_stm32_pedal_uart_handle()){
+        (void)HAL_UART_AbortReceive(huart);
         (void)HAL_HalfDuplex_EnableReceiver(huart);
         (void)HAL_UART_Receive_IT(huart,&pedal_rx_byte,1u);
     }
