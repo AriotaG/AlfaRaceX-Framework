@@ -204,6 +204,14 @@ static void telemetry_runtime_unit(void){
     assert(rt.vehicle.valid_mask&ARX_VS_BATTERY_CURR);
     assert(rt.vehicle.battery_current_a>-0.1f&&rt.vehicle.battery_current_a<0.1f);
 
+    rt.config.diagnostics_enabled=false;
+    arx_runtime_tick(&rt,900u);
+    assert(rt.telemetry_last_poll_ms==0u);
+    rt.config.diagnostics_enabled=true;
+    rt.config.telemetry_enabled=false;
+    arx_runtime_tick(&rt,950u);
+    assert(rt.telemetry_last_poll_ms==0u);
+    rt.config.telemetry_enabled=true;
     arx_runtime_tick(&rt,1000u);
     (void)arx_runtime_drain_can(&rt,1000u,16u);
     bool found_soc_request=false;

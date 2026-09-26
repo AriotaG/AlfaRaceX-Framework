@@ -704,7 +704,8 @@ static void telemetry_accept_response(
 }
 
 static void telemetry_poll_current_page(ArxRuntime *rt,uint32_t now_ms) {
-    if(!rt||!rt->config.diesel_profile||!rt->menu.visible||
+    if(!rt||!rt->config.telemetry_enabled||!rt->config.diagnostics_enabled||
+       !rt->config.diesel_profile||!rt->menu.visible||
        rt->menu.level!=ARX_MENU_LEVEL_SUB||rt->menu.main_page!=1u)return;
     if(rt->telemetry_last_poll_ms&&now_ms-rt->telemetry_last_poll_ms<500u)return;
     rt->telemetry_last_poll_ms=now_ms;

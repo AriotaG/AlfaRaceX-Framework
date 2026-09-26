@@ -62,6 +62,20 @@ int main(void) {
     assert(c.launch_torque_threshold_nm==125u && c.pedal_mode==6u);
     assert(c.pedal_power==-3 && c.sniffer_enabled && c.elm327_enabled);
 
+    ArxRuntimeConfig bench=c;
+    bench.front_brake_override_enabled=true;bench.acc_virtual_pad_enabled=true;
+    bench.has_virtual_pad_enabled=true;bench.exhaust_flap_enabled=true;
+    bench.esc_tc_customizer_enabled=true;bench.acc_autostart_mode=2;
+    arx_config_apply_bench_start(&bench);
+    assert(!bench.smart_start_stop_enabled && !bench.immobilizer_enabled && !bench.clear_faults_enabled);
+    assert(!bench.dyno_enabled && !bench.awd_control_enabled && !bench.front_brake_override_enabled);
+    assert(!bench.acc_virtual_pad_enabled && !bench.has_virtual_pad_enabled && !bench.exhaust_flap_enabled);
+    assert(!bench.esc_tc_customizer_enabled && bench.acc_autostart_mode==0);
+    assert(bench.pedal_mode==ARX_CFG_PEDAL_DISABLED && bench.pedal_power==0);
+    assert(!bench.diagnostics_enabled && !bench.sgw_detection_enabled);
+    assert(bench.shift_threshold_rpm==4750u && bench.sniffer_enabled && bench.elm327_enabled);
+    assert(c.smart_start_stop_enabled && c.pedal_mode==6); /* Original settings unchanged. */
+
     uint8_t visible[35]={0};
     visible[0]=1; visible[15]=1; visible[16]=1; visible[34]=1;
     uint16_t packed[3]={0};

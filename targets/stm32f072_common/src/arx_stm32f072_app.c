@@ -261,6 +261,11 @@ void arx_stm32f072_app_init(ArxTargetRole role) {
         .user=0
     };
     arx_runtime_init(&runtime_ctx,runtime_role(role),&ops);
+#if defined(ARX_SAFE_BENCH_START)
+    ArxRuntimeConfig initial=runtime_ctx.config;
+    arx_config_apply_bench_start(&initial);
+    arx_runtime_apply_config(&runtime_ctx,&initial,HAL_GetTick());
+#endif
     runtime_ctx.power.enabled=(role==ARX_TARGET_ROLE_C1);
 
     target_storage=arx_stm32f072_storage_backend();
@@ -268,6 +273,9 @@ void arx_stm32f072_app_init(ArxTargetRole role) {
     if(role==ARX_TARGET_ROLE_C1){
         ArxRuntimeConfig stored;
         if(arx_storage_read_settings(&target_storage,&stored)){
+#if defined(ARX_SAFE_BENCH_START)
+            arx_config_apply_bench_start(&stored);
+#endif
             arx_runtime_apply_config(&runtime_ctx,&stored,HAL_GetTick());
         }
 

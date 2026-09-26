@@ -26,3 +26,11 @@ and successful ARM builds do not establish wire-level equivalence.
 
 No automatic physical write is authorized. Bench write/readback/boot/DFU re-entry/
 golden restore/equality checks remain mandatory before vehicle validation.
+
+Target builds default to `ARX_SAFE_BENCH_START=ON`. On every boot this applies a
+volatile safety profile to both defaults and imported legacy preferences before
+configuration synchronization. Active controls and automatic diagnostic polling
+start disabled. Stored golden preferences are not rewritten by this policy; explicit
+subsequent menu/configuration actions remain available. This deliberate ARX bench
+deviation is separate from golden parity. Turning the build option off is not a
+claim of physical validation and must not be used for an initial bench image.

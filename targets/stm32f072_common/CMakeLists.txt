@@ -15,6 +15,10 @@ if(NOT DEFINED ARX_ROLE)
 endif()
 
 set(CPU_DEFS STM32F072xB ARX_TARGET_STM32F072)
+option(ARX_SAFE_BENCH_START "Disable active vehicle functions on every boot, including imported settings" ON)
+if(ARX_SAFE_BENCH_START)
+  list(APPEND CPU_DEFS ARX_SAFE_BENCH_START=1)
+endif()
 
 if(ARX_ROLE STREQUAL "C1")
   list(APPEND CPU_DEFS ARX_IMAGE_ROLE=ARX_TARGET_ROLE_C1 ARX_BUILD_C1=1)
