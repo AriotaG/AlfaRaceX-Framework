@@ -104,6 +104,37 @@ internal sealed class BackupRestoreService
         return new BackupResult(role, binPath, metadataPath, hash, data.Length);
     }
 
+    // Import owns a verified copy; removable source media is never a catalog dependency.
+    internal static BackupResult ImportSnapshot(string role, string sourcePath, string destinationFolder)
+    {
+        role = NormalizeRole(role);
+        var (data, _) = ReadValidatedSnapshot(role, sourcePath, null, requireIntegrity: false);
+        return SaveSnapshot(role, destinationFolder, data);
+    }
+
+    private static (byte[] Data, string Hash) ReadValidatedSnapshot(
+        string role, string binPath, string? expectedSha256, bool requireIntegrity)
+    {
+        // Keep memory bounded and deny concurrent writes while taking the snapshot.
+        using var input = new FileStream(binPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        if (input.Length != FlashSize)
+            throw new InvalidDataException($"Backup non valido: attesi {FlashSize} byte, trovati {input.Length}.");
+        byte[] data = new byte[FlashSize];
+        input.ReadExactly(data);
+        if (input.ReadByte() != -1)
+            throw new InvalidDataException("Dimensione del backup cambiata durante la lettura.");
+        string? detectedRole = DetectRole(binPath);
+        if (detectedRole is not null && !string.Equals(role, detectedRole, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Il backup risulta associato al modulo {detectedRole}, ma hai selezionato {role}.");
+        string hash = Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
+        if (requireIntegrity && expectedSha256 is null && !File.Exists(Path.ChangeExtension(binPath, ".json")))
+            throw new InvalidDataException("Ripristino rifiutato: manca un hash registrato o un metadato di integrità.");
+        if (expectedSha256 is not null && !string.Equals(hash, expectedSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Il backup è cambiato dopo la catalogazione. Ripristino rifiutato.");
+        VerifyMetadataIfPresent(role, binPath, hash);
+        return (data, hash);
+    }
+
     public Task RestoreAsync(
         string role,
         string binPath,
@@ -118,33 +149,7 @@ internal sealed class BackupRestoreService
 
         return Task.Run(() =>
         {
-            if (!File.Exists(binPath))
-                throw new FileNotFoundException(
-                    "Il file di backup selezionato non esiste.",
-                    binPath);
-
-            byte[] data = File.ReadAllBytes(binPath);
-            if (data.Length != FlashSize)
-                throw new InvalidDataException(
-                    $"Backup non valido: attesi {FlashSize} byte, trovati {data.Length}.");
-
-            string? detectedRole = DetectRole(binPath);
-            if (!string.IsNullOrWhiteSpace(detectedRole) &&
-                !string.Equals(role, detectedRole, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidDataException(
-                    $"Il backup risulta associato al modulo {detectedRole}, " +
-                    $"ma hai selezionato {role}.");
-            }
-
-            string hash = Convert.ToHexString(
-                SHA256.HashData(data)).ToLowerInvariant();
-
-            if (expectedSha256 is null && !File.Exists(Path.ChangeExtension(binPath, ".json")))
-                throw new InvalidDataException("Ripristino rifiutato: manca un hash registrato o un metadato di integrità.");
-            if (expectedSha256 is not null && !string.Equals(hash, expectedSha256, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("Il backup è cambiato dopo la catalogazione. Ripristino rifiutato.");
-            VerifyMetadataIfPresent(role, binPath, hash);
+            var (data, hash) = ReadValidatedSnapshot(role, binPath, expectedSha256, requireIntegrity: true);
 
             progress.Report(($"Connessione DFU {role}...", 0));
             using var dfu = _openDevice();
@@ -199,8 +204,15 @@ internal sealed class BackupRestoreService
         if (!File.Exists(metadataPath))
             return;
 
-        BackupMetadata? metadata = JsonSerializer.Deserialize<BackupMetadata>(
-            File.ReadAllText(metadataPath));
+        BackupMetadata? metadata;
+        try
+        {
+            metadata = JsonSerializer.Deserialize<BackupMetadata>(File.ReadAllText(metadataPath));
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException($"Metadati backup JSON non validi: {metadataPath}.", ex);
+        }
 
         if (metadata is null)
             throw new InvalidDataException("Metadati backup non validi.");

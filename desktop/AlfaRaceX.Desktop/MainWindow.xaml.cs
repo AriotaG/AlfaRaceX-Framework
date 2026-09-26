@@ -3,7 +3,6 @@ using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.Reflection;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Windows;
 
@@ -381,14 +380,10 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog(this) != true)
             return;
 
-        var info = new FileInfo(dialog.FileName);
-        if (info.Length != BackupRestoreService.FlashSize)
-            throw new InvalidDataException($"Backup non valido: attesi {BackupRestoreService.FlashSize} byte, trovati {info.Length}.");
-
-        string sha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(dialog.FileName))).ToLowerInvariant();
-        string metadata = Path.ChangeExtension(dialog.FileName, ".json");
-        _history.AddBackup(role, dialog.FileName, File.Exists(metadata) ? metadata : string.Empty, sha, info.Length, info.CreationTimeUtc, "imported");
-        Log("INFO", "BACKUP", $"Importato backup {role}: {Path.GetFileName(dialog.FileName)} ({sha}).");
+        BackupResult imported = BackupRestoreService.ImportSnapshot(role, dialog.FileName, DesktopPaths.Backups);
+        _history.AddBackup(imported.Role, imported.BinPath, imported.MetadataPath, imported.Sha256,
+            imported.Size, DateTime.UtcNow, "imported");
+        Log("INFO", "BACKUP", $"Importato backup {role}: {Path.GetFileName(dialog.FileName)}; copia verificata {imported.BinPath} ({imported.Sha256}).");
         SendBackups();
     }
 
