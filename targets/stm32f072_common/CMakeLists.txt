@@ -103,7 +103,7 @@ target_compile_definitions(arx_${ARX_ROLE}.elf PRIVATE
   ARX_FIRMWARE_VERSION="${ARX_FIRMWARE_VERSION_VALUE}"
 )
 target_compile_options(arx_${ARX_ROLE}.elf PRIVATE
-  -Os -ffunction-sections -fdata-sections -Wall -Wextra -Wpedantic -Werror
+  -Os -ffunction-sections -fdata-sections -fstack-usage -Wall -Wextra -Wpedantic -Werror
 )
 
 # Vendor STM32CubeF0 sources are built as provided by ST. AlfaRaceX sources retain
