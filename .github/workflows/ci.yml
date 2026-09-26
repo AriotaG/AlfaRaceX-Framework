@@ -10,6 +10,16 @@ permissions:
   contents: read
 
 jobs:
+  firmware-file-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Validate firmware file parsing
+        run: dotnet run --project tests/AlfaRaceX.HostTests -c Release
+
   host-tests:
     runs-on: ubuntu-latest
     strategy:
