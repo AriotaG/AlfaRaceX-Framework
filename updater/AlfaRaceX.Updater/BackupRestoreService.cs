@@ -21,6 +21,8 @@ internal sealed class BackupMetadata
     public int FlashSize { get; set; }
     public string Sha256 { get; set; } = "";
     public string FileName { get; set; } = "";
+    public string RoleEvidence { get; set; } = "user-selected; physical MCU role not verified";
+    public string Scope { get; set; } = "internal-flash-only; excludes option bytes, OTP and system ROM";
 }
 
 internal sealed class BackupRestoreService
@@ -57,42 +59,46 @@ internal sealed class BackupRestoreService
                 readProgress,
                 ct);
 
-            string hash = Convert.ToHexString(
-                SHA256.HashData(data)).ToLowerInvariant();
-
-            string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-            string binName = $"AlfaRaceX-{role}-backup-{stamp}.bin";
-            string binPath = Path.Combine(destinationFolder, binName);
-            File.WriteAllBytes(binPath, data);
-
-            var metadata = new BackupMetadata
-            {
-                Role = role,
-                UpdaterVersion = AppConstants.UpdaterVersion,
-                CreatedUtc = DateTime.UtcNow,
-                FlashStart = FlashStart,
-                FlashSize = FlashSize,
-                Sha256 = hash,
-                FileName = binName
-            };
-
-            string metadataPath = Path.ChangeExtension(binPath, ".json");
-            File.WriteAllText(
-                metadataPath,
-                JsonSerializer.Serialize(
-                    metadata,
-                    new JsonSerializerOptions { WriteIndented = true }));
-
-            log($"Backup {role}: SHA-256 {hash}.");
+            BackupResult result = SaveSnapshot(role, destinationFolder, data);
+            log($"Backup {role}: SHA-256 {result.Sha256}.");
             progress.Report(($"Backup {role} completato.", 100));
-
-            return new BackupResult(
-                role,
-                binPath,
-                metadataPath,
-                hash,
-                data.Length);
+            return result;
         }, ct);
+    }
+
+    // Saves the bytes already read from the device. This does not prove physical MCU identity.
+    internal static BackupResult SaveSnapshot(string role, string destinationFolder, byte[] data)
+    {
+        role = NormalizeRole(role);
+        if (data.Length != FlashSize)
+            throw new InvalidDataException($"Backup incompleto: attesi {FlashSize} byte, trovati {data.Length}.");
+        Directory.CreateDirectory(destinationFolder);
+        string hash = Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
+        DateTime created = DateTime.UtcNow;
+        string name = $"AlfaRaceX-{role}-backup-{created:yyyyMMdd-HHmmss-fffffff}-{Guid.NewGuid():N}.bin";
+        string binPath = Path.Combine(destinationFolder, name);
+        using (var file = new FileStream(binPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        {
+            file.Write(data);
+            file.Flush(flushToDisk: true);
+        }
+        using (var saved = File.OpenRead(binPath))
+        {
+            if (!string.Equals(Convert.ToHexString(SHA256.HashData(saved)), hash, StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Verifica del backup scritto su disco fallita.");
+        }
+        var metadata = new BackupMetadata
+        {
+            Role = role, UpdaterVersion = AppConstants.UpdaterVersion, CreatedUtc = created,
+            FlashStart = FlashStart, FlashSize = data.Length, Sha256 = hash, FileName = name
+        };
+        string metadataPath = Path.ChangeExtension(binPath, ".json");
+        using (var file = new FileStream(metadataPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        {
+            JsonSerializer.Serialize(file, metadata, new JsonSerializerOptions { WriteIndented = true });
+            file.Flush(flushToDisk: true);
+        }
+        return new BackupResult(role, binPath, metadataPath, hash, data.Length);
     }
 
     public Task RestoreAsync(

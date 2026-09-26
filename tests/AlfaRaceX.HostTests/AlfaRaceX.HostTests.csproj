@@ -12,5 +12,9 @@
     <Compile Include="../../updater/AlfaRaceX.Updater/ManifestClient.cs" Link="ManifestClient.cs" />
     <Compile Include="../../updater/AlfaRaceX.Updater/Models.cs" Link="Models.cs" />
     <Compile Include="../../updater/AlfaRaceX.Updater/AppConstants.cs" Link="AppConstants.cs" />
+    <Compile Include="../../updater/AlfaRaceX.Updater/BackupRestoreService.cs" Link="BackupRestoreService.cs" />
+    <Compile Include="../../updater/AlfaRaceX.Updater/DfuDevice.cs" Link="DfuDevice.cs" />
+    <Compile Include="../../updater/AlfaRaceX.Updater/UsbDeviceEnumerator.cs" Link="UsbDeviceEnumerator.cs" />
+    <Compile Include="../../updater/AlfaRaceX.Updater/WinUsbNative.cs" Link="WinUsbNative.cs" />
   </ItemGroup>
 </Project>

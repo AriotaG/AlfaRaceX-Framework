@@ -137,6 +137,35 @@ try
         }
         throw new Exception("Cancellation ignored");
     });
+    Test("backup saves bytes and bound metadata", () => {
+        byte[] data = new byte[BackupRestoreService.FlashSize];
+        for (int i = 0; i < data.Length; i++) data[i] = (byte)i;
+        var result = BackupRestoreService.SaveSnapshot("c1", Path.Combine(root, "backups"), data);
+        var meta = System.Text.Json.JsonSerializer.Deserialize<BackupMetadata>(File.ReadAllText(result.MetadataPath))!;
+        if (!File.ReadAllBytes(result.BinPath).SequenceEqual(data) || result.Role != "C1" ||
+            meta.Role != result.Role || meta.FileName != Path.GetFileName(result.BinPath) ||
+            meta.FlashStart != BackupRestoreService.FlashStart || meta.FlashSize != data.Length ||
+            meta.Sha256 != result.Sha256 || meta.CreatedUtc.Kind != DateTimeKind.Utc ||
+            result.Sha256 != Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(data)).ToLowerInvariant())
+            throw new Exception("Backup metadata or bytes changed");
+    });
+    Test("parallel backups never overwrite", () => {
+        string dir = Path.Combine(root, "parallel-backups");
+        var paths = new System.Collections.Concurrent.ConcurrentBag<string>();
+        Parallel.For(0, 12, i => {
+            byte[] data = new byte[BackupRestoreService.FlashSize]; data[0] = (byte)i;
+            var result = BackupRestoreService.SaveSnapshot("BH", dir, data);
+            paths.Add(result.BinPath);
+            if (!File.ReadAllBytes(result.BinPath).SequenceEqual(data)) throw new Exception("Backup overwritten");
+        });
+        if (paths.Distinct().Count() != 12 || Directory.EnumerateFiles(dir).Count() != 24)
+            throw new Exception("Backup files collided");
+    });
+    Test("incomplete backup rejected before writing", () => {
+        string dir = Path.Combine(root, "incomplete-backup");
+        Reject(() => BackupRestoreService.SaveSnapshot("BH", dir, new byte[1]));
+        if (Directory.Exists(dir)) throw new Exception("Incomplete backup published");
+    });
 }
 finally { Directory.Delete(root, true); }
 Console.WriteLine($"Failed: {failed}");
