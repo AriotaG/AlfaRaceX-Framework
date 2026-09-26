@@ -47,6 +47,7 @@ public partial class MainWindow : Window
     {
         try
         {
+            StartupLog.Write("CREATE_WEBVIEW2");
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: DesktopPaths.WebView2);
             await Browser.EnsureCoreWebView2Async(environment);
             Browser.CoreWebView2.ProcessFailed += (_, failure) =>
@@ -78,9 +79,11 @@ public partial class MainWindow : Window
             Browser.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
             Browser.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
             Browser.Source = new Uri($"https://{UiHost}/index.html");
+            StartupLog.Write("WEBVIEW2_READY");
         }
         catch (Exception ex)
         {
+            StartupLog.Write("WEBVIEW2_FAILED", ex);
             _history.AddEvent("ERROR", "UI", ex.Message);
             MessageBox.Show(
                 "Impossibile avviare l'interfaccia AlfaRaceX.\n\n" + ex.Message,

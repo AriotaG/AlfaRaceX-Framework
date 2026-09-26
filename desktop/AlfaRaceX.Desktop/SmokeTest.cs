@@ -108,8 +108,35 @@ internal static class SmokeTest
                 await AssertJs("document.getElementById('backupBtn').disabled && document.querySelectorAll('.flash-btn:not(:disabled),.restore:not(:disabled)').length === 0", "operazioni bloccate senza un singolo DFU");
             }
             SendMessage(hwnd, 0x0219, new IntPtr(0x0007), IntPtr.Zero); // Restore real enumeration.
+            window.WindowState = System.Windows.WindowState.Minimized;
+            var start = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath
+                ?? throw new InvalidOperationException("Percorso eseguibile non disponibile."))
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+            };
+            start.ArgumentList.Add("--ui-smoke-test");
+            start.ArgumentList.Add("--instance-key=" + App.InstanceKey["Local\\AlfaRaceX.Smoke.".Length..]);
+            start.ArgumentList.Add("--smoke-root=" + DesktopPaths.Root + "-second-" + Guid.NewGuid().ToString("N"));
+            using (var second = System.Diagnostics.Process.Start(start)
+                ?? throw new InvalidOperationException("Seconda istanza non avviata."))
+            {
+                try { await second.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10)); }
+                finally { if (!second.HasExited) second.Kill(entireProcessTree: true); }
+                if (second.ExitCode != 0) throw new InvalidOperationException("Seconda istanza non ha notificato la prima.");
+            }
+            deadline = DateTime.UtcNow.AddSeconds(5);
+            while (window.WindowState == System.Windows.WindowState.Minimized)
+            {
+                if (DateTime.UtcNow > deadline) throw new TimeoutException("Secondo avvio non ha ripristinato la finestra.");
+                await Task.Delay(100);
+            }
+            string startup = File.ReadAllText(StartupLog.FilePath);
+            if (!startup.Contains("CREATE_MAIN_WINDOW") || !startup.Contains("WEBVIEW2_READY") || !startup.Contains("RESTORE_EXISTING_WINDOW"))
+                throw new InvalidOperationException("Diagnostica avvio/seconda istanza incompleta.");
             await AssertJs("document.styleSheets.length >= 2 && typeof bootstrap === 'object'", "risorse Bootstrap locali");
-            File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), "PASS: WebView2, worker bridge, disclaimer persistito, preparazione reale dei tre firmware, controlli riattivati, sei viste, Bootstrap locale, notifica Windows USB e debounce con enumerazione reale (senza hotplug fisico).");
+            File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), "PASS: WebView2, worker bridge, disclaimer persistito, preparazione reale dei tre firmware, controlli DFU, sei viste, Bootstrap locale, notifica Windows USB/debounce con enumerazione reale (senza hotplug fisico), secondo processo ripristina la prima finestra, log di avvio.");
             return 0;
         }
         catch (Exception ex)
