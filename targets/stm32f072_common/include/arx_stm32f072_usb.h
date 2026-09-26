@@ -12,9 +12,10 @@ bool arx_stm32f072_usb_detach(void);
 bool arx_stm32f072_usb_send(const uint8_t *data,size_t length);
 bool arx_stm32f072_usb_is_configured(void);
 void arx_stm32f072_usb_irq(void);
+void arx_stm32f072_usb_poll(void);
 
 /* Implemented by the board application; invoked from the USB OUT callback. */
-void arx_stm32f072_usb_rx(const uint8_t *data,size_t length);
+bool arx_stm32f072_usb_rx(const uint8_t *data,size_t length);
 #endif
 
 #endif

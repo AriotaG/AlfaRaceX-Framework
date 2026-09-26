@@ -7,6 +7,7 @@
 #include "arx_stm32f072_log.h"
 #include "arx_stm32f072_usb.h"
 #include "stm32f0xx_hal.h"
+#include "arx/arx_ingress.h"
 #include <string.h>
 
 extern void arx_stm32f072_platform_init(ArxTargetRole role);
@@ -15,6 +16,33 @@ extern UART_HandleTypeDef *arx_stm32_interchip_uart_handle(void);
 extern UART_HandleTypeDef *arx_stm32_pedal_uart_handle(void);
 
 static ArxRuntime runtime_ctx;
+static ArxIngressQueue ingress;
+
+static bool enqueue_ingress(const ArxIngressEvent *event) {
+    const uint32_t mask=__get_PRIMASK();
+    __disable_irq();
+    const bool queued=arx_ingress_push(&ingress,event);
+    __set_PRIMASK(mask);
+    return queued;
+}
+
+static void drain_ingress(void) {
+    for(unsigned i=0;i<ARX_INGRESS_CAPACITY;i++) {
+        ArxIngressEvent event;
+        const uint32_t mask=__get_PRIMASK();
+        __disable_irq();
+        const bool received=arx_ingress_pop(&ingress,&event);
+        __set_PRIMASK(mask);
+        if(!received)break;
+        switch(event.kind) {
+            case ARX_INGRESS_CAN: arx_runtime_on_can(&runtime_ctx,&event.data.can,event.timestamp_ms);break;
+            case ARX_INGRESS_INTERCHIP: arx_runtime_on_interchip(&runtime_ctx,event.data.bytes,event.timestamp_ms);break;
+            case ARX_INGRESS_PEDAL: arx_runtime_on_pedal_reply(&runtime_ctx,event.data.bytes[0]);break;
+            case ARX_INGRESS_USB: arx_runtime_usb_rx(&runtime_ctx,event.data.bytes,event.length,event.timestamp_ms);break;
+            default: break;
+        }
+    }
+}
 static ArxTargetRole target_role;
 static uint8_t uart2_rx[ARX_INTERCHIP_FRAME_SIZE];
 static bool uart2_sync_obtained;
@@ -214,6 +242,7 @@ static ArxRuntimeRole runtime_role(ArxTargetRole r) {
 
 void arx_stm32f072_app_init(ArxTargetRole role) {
     target_role=role;
+    memset(&ingress,0,sizeof(ingress));
     arx_stm32f072_platform_init(role);
 
     ArxRuntimeOps ops={
@@ -300,11 +329,16 @@ ArxRuntime *arx_stm32f072_runtime(void) {
 void arx_stm32f072_interchip_rx(
     const uint8_t raw[ARX_INTERCHIP_FRAME_SIZE]
 ) {
-    arx_runtime_on_interchip(&runtime_ctx,raw,HAL_GetTick());
+    if(!raw)return;
+    ArxIngressEvent event={.kind=ARX_INGRESS_INTERCHIP,.timestamp_ms=HAL_GetTick(),.length=ARX_INTERCHIP_FRAME_SIZE};
+    memcpy(event.data.bytes,raw,ARX_INTERCHIP_FRAME_SIZE);
+    (void)enqueue_ingress(&event);
 }
 
 void arx_stm32f072_pedal_rx(uint8_t reply_byte) {
-    arx_runtime_on_pedal_reply(&runtime_ctx,reply_byte);
+    ArxIngressEvent event={.kind=ARX_INGRESS_PEDAL,.timestamp_ms=HAL_GetTick(),.length=1};
+    event.data.bytes[0]=reply_byte;
+    (void)enqueue_ingress(&event);
 }
 
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
@@ -313,17 +347,20 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
     CAN_RxHeaderTypeDef h={0};
     uint8_t data[8]={0};
     if(HAL_CAN_GetRxMessage(hcan,CAN_RX_FIFO0,&h,data)!=HAL_OK)return;
+    if(h.RTR!=CAN_RTR_DATA||h.DLC>8u)return;
 
     ArxCanFrame f={0};
-    f.bus=runtime_ctx.role==ARX_RUNTIME_C1?ARX_BUS_C1:
-          runtime_ctx.role==ARX_RUNTIME_C2?ARX_BUS_C2:ARX_BUS_BH;
+    f.bus=target_role==ARX_TARGET_ROLE_C1?ARX_BUS_C1:
+          target_role==ARX_TARGET_ROLE_C2?ARX_BUS_C2:ARX_BUS_BH;
     f.extended_id=(h.IDE==CAN_ID_EXT);
     f.id=f.extended_id?h.ExtId:h.StdId;
     f.dlc=h.DLC>8u?8u:h.DLC;
     f.timestamp_ms=HAL_GetTick();
     memcpy(f.data,data,f.dlc);
 
-    arx_runtime_on_can(&runtime_ctx,&f,f.timestamp_ms);
+    ArxIngressEvent event={.kind=ARX_INGRESS_CAN,.timestamp_ms=f.timestamp_ms};
+    event.data.can=f;
+    (void)enqueue_ingress(&event);
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
@@ -373,12 +410,16 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
     }
 }
 
-void arx_stm32f072_usb_rx(const uint8_t *data,size_t length) {
-    if(!data||length==0u)return;
-    arx_runtime_usb_rx(&runtime_ctx,data,length,HAL_GetTick());
+bool arx_stm32f072_usb_rx(const uint8_t *data,size_t length) {
+    if(!data||length==0u||length>ARX_INGRESS_USB_SIZE)return false;
+    ArxIngressEvent event={.kind=ARX_INGRESS_USB,.timestamp_ms=HAL_GetTick(),.length=(uint8_t)length};
+    memcpy(event.data.bytes,data,length);
+    return enqueue_ingress(&event);
 }
 
 void arx_stm32f072_app_loop(void) {
+    drain_ingress();
+    arx_stm32f072_usb_poll();
     const uint32_t now=HAL_GetTick();
     if(runtime_ctx.usb_mode.state==ARX_USB_WAIT_HOST&&arx_stm32f072_usb_is_configured())
         arx_runtime_usb_configured(&runtime_ctx,now);

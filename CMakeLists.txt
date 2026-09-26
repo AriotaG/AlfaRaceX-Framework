@@ -28,6 +28,7 @@ add_library(arx_core
     src/core/arx_isotp.c
     src/core/arx_log_export.c
     src/core/arx_link.c
+    src/core/arx_ingress.c
     src/core/arx_power.c
     src/core/arx_runtime.c
     src/core/arx_sgw.c
@@ -103,6 +104,7 @@ foreach(test_name
     elm_isolation
     interchip_stress
     can_backpressure
+    ingress
     storage
     drive_led_usb
     runtime
