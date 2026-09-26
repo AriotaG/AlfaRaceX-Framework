@@ -7,13 +7,12 @@ void arx_config_defaults(ArxRuntimeConfig *c) {
     memset(c,0,sizeof(*c));
 
     /*
-     * Clean-flash defaults mirror the deployed compile-time fallback profile:
-     * active-by-default core services stay active; optional vehicle features
-     * remain disabled until stored configuration enables them.
+     * A clean or erased configuration must not enable unvalidated vehicle
+     * interventions. Explicit stored values remain supported by the importer.
      */
-    c->immobilizer_enabled=true;
-    c->smart_start_stop_enabled=true;
-    c->clear_faults_enabled=true;
+    c->immobilizer_enabled=false;
+    c->smart_start_stop_enabled=false;
+    c->clear_faults_enabled=false;
     c->diesel_profile=true;
     c->seatbelt_alarm_enabled=true;
 
@@ -139,8 +138,8 @@ bool arx_config_import_legacy_slots(
 
     /*
      * An erased half-word is 0xFFFF. For boolean settings the deployed reader
-     * accepts only 0/1 and otherwise falls back to the compile-time default.
-     * Keep exactly that semantic rather than treating 0xFFFF as true.
+     * accepts only 0/1; invalid or erased values use safe ARX defaults.
+     * Explicit saved choices are preserved rather than treating 0xFFFF as true.
      */
 #define ARX_IMPORT_BOOL(field, idx) \
     do { if (s[(idx)] <= 1u) c->field = (s[(idx)] != 0u); } while (0)

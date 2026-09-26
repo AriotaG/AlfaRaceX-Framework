@@ -9,12 +9,12 @@
 int main(void) {
     ArxRuntimeConfig c;
     arx_config_defaults(&c);
-    assert(c.smart_start_stop_enabled);
+    assert(!c.smart_start_stop_enabled);
     assert(c.shift_threshold_rpm==4500u);
     assert(c.launch_torque_threshold_nm==100u);
     assert(c.diesel_profile);
-    assert(c.immobilizer_enabled);
-    assert(c.clear_faults_enabled);
+    assert(!c.immobilizer_enabled);
+    assert(!c.clear_faults_enabled);
     assert(c.seatbelt_alarm_enabled);
     assert(!c.ipc_my23);
     assert(!c.dyno_enabled);
@@ -24,9 +24,9 @@ int main(void) {
     for(size_t i=0;i<ARX_CONFIG_LEGACY_SLOT_COUNT;i++) erased[i]=0xFFFFu;
     ArxRuntimeConfig clean;
     assert(arx_config_import_legacy_slots(erased,&clean));
-    assert(clean.immobilizer_enabled);
-    assert(clean.smart_start_stop_enabled);
-    assert(clean.clear_faults_enabled);
+    assert(!clean.immobilizer_enabled);
+    assert(!clean.smart_start_stop_enabled);
+    assert(!clean.clear_faults_enabled);
     assert(clean.diesel_profile);
     assert(clean.seatbelt_alarm_enabled);
     assert(clean.shift_threshold_rpm==4500u);
@@ -52,11 +52,12 @@ int main(void) {
     assert(sel && sel->generation==1u);
 
     uint16_t legacy[32]={0};
-    legacy[1]=1; legacy[4]=4750; legacy[7]=1; legacy[10]=1;
+    legacy[0]=1; legacy[12]=1; legacy[1]=1; legacy[4]=4750; legacy[7]=1; legacy[10]=1;
     legacy[15]=1; legacy[17]=125; legacy[19]=6; legacy[28]=(uint8_t)-3;
     legacy[30]=1; legacy[31]=1;
     assert(arx_config_import_legacy_slots(legacy,&c));
     assert(c.smart_start_stop_enabled && c.shift_threshold_rpm==4750u);
+    assert(c.immobilizer_enabled && c.clear_faults_enabled);
     assert(c.dyno_enabled && c.awd_control_enabled && c.diesel_profile);
     assert(c.launch_torque_threshold_nm==125u && c.pedal_mode==6u);
     assert(c.pedal_power==-3 && c.sniffer_enabled && c.elm327_enabled);

@@ -35,15 +35,18 @@ int main(void) {
 
     ArxRuntimeConfig erased_cfg;
     assert(arx_storage_read_settings(&b,&erased_cfg));
-    assert(erased_cfg.immobilizer_enabled);
-    assert(erased_cfg.smart_start_stop_enabled);
-    assert(erased_cfg.clear_faults_enabled);
+    assert(!erased_cfg.immobilizer_enabled);
+    assert(!erased_cfg.smart_start_stop_enabled);
+    assert(!erased_cfg.clear_faults_enabled);
     assert(erased_cfg.diesel_profile);
     assert(!erased_cfg.ipc_my23);
     assert(!erased_cfg.dyno_enabled);
 
     ArxRuntimeConfig c;
     arx_config_defaults(&c);
+    c.immobilizer_enabled=true;
+    c.smart_start_stop_enabled=true;
+    c.clear_faults_enabled=true;
     c.shift_indicator_enabled=true;
     c.shift_threshold_rpm=4200u;
     c.pedal_mode=ARX_CFG_PEDAL_DYNAMIC;
@@ -59,6 +62,9 @@ int main(void) {
 
     ArxRuntimeConfig loaded;
     assert(arx_storage_read_settings(&b,&loaded));
+    assert(loaded.immobilizer_enabled);
+    assert(loaded.smart_start_stop_enabled);
+    assert(loaded.clear_faults_enabled);
     assert(loaded.shift_indicator_enabled);
     assert(loaded.shift_threshold_rpm==4200u);
     assert(loaded.pedal_mode==ARX_CFG_PEDAL_DYNAMIC);
