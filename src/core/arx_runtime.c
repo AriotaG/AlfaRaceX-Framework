@@ -221,6 +221,11 @@ static bool elm_start_candidate(ArxRuntime *rt,uint32_t now_ms) {
     if(!rt||rt->elm_candidate_index>=rt->elm_candidate_count)return false;
     const ArxElmBus candidate=rt->elm_candidates[rt->elm_candidate_index];
 
+    /* Reserve the configuration, arm and request slots together. Runtime ingress
+       is serialized, so no interrupt can consume this space during construction. */
+    if(candidate!=ARX_ELM_BUS_C1 &&
+       rt->interchip.tx.count>ARX_INTERCHIP_QUEUE_SIZE-3u)return false;
+
     if(!elm_arm_remote(rt,candidate,now_ms))return false;
 
     ArxCanFrame first;
@@ -313,14 +318,18 @@ static void elm_tick(ArxRuntime *rt,uint32_t now_ms) {
         return;
     }
 
+    if((int32_t)(now_ms-rt->elm_deadline_ms)>=0){
+        (void)elm_try_next_candidate(rt,now_ms);
+        return;
+    }
+    const ArxElmBus target=rt->elm_candidates[rt->elm_candidate_index];
+    const bool room=target==ARX_ELM_BUS_C1
+        ?rt->can_tx.queues[ARX_PRIORITY_HIGH].count<ARX_CAN_QUEUE_CAPACITY
+        :rt->interchip.tx.count<ARX_INTERCHIP_QUEUE_SIZE;
     ArxCanFrame next;
-    if(arx_elm_transaction_next_tx(&rt->elm_transaction,now_ms,&next)){
-        const ArxElmBus target=rt->elm_candidates[rt->elm_candidate_index];
+    if(room&&arx_elm_transaction_next_tx(&rt->elm_transaction,now_ms,&next)){
         (void)elm_send_frame(rt,&next,target,now_ms);
     }
-
-    if((int32_t)(now_ms-rt->elm_deadline_ms)>=0)
-        (void)elm_try_next_candidate(rt,now_ms);
 }
 
 static void elm_process_line(ArxRuntime *rt,uint32_t now_ms) {
@@ -336,17 +345,17 @@ static void elm_process_line(ArxRuntime *rt,uint32_t now_ms) {
     while(*p==' '||*p=='\t')p++;
     const bool at=(p[0]=='A'||p[0]=='a')&&(p[1]=='T'||p[1]=='t');
 
-    if(at){
-        char reply[192];
-        const size_t n=arx_elm327_command(&rt->elm,p,reply,sizeof(reply));
-        (void)elm_usb_queue(rt,reply,n);
+    if(rt->elm_request_active){
+        (void)elm_usb_text(rt,"BUS BUSY");
+        elm_usb_prompt(rt);
         rt->elm_line_len=0u;
         return;
     }
 
-    if(rt->elm_request_active){
-        (void)elm_usb_text(rt,"BUS BUSY");
-        elm_usb_prompt(rt);
+    if(at){
+        char reply[192];
+        const size_t n=arx_elm327_command(&rt->elm,p,reply,sizeof(reply));
+        (void)elm_usb_queue(rt,reply,n);
         rt->elm_line_len=0u;
         return;
     }
@@ -704,7 +713,7 @@ static void telemetry_accept_response(
 }
 
 static void telemetry_poll_current_page(ArxRuntime *rt,uint32_t now_ms) {
-    if(!rt||!rt->config.telemetry_enabled||!rt->config.diagnostics_enabled||
+    if(!rt||rt->elm_request_active||!rt->config.telemetry_enabled||!rt->config.diagnostics_enabled||
        !rt->config.diesel_profile||!rt->menu.visible||
        rt->menu.level!=ARX_MENU_LEVEL_SUB||rt->menu.main_page!=1u)return;
     if(rt->telemetry_last_poll_ms&&now_ms-rt->telemetry_last_poll_ms<500u)return;

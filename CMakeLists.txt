@@ -102,6 +102,7 @@ foreach(test_name
     isotp_elm
     isotp_integrity
     elm_isolation
+    elm_queue
     interchip_stress
     can_backpressure
     ingress
