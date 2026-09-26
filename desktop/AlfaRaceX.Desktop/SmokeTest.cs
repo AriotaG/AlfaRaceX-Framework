@@ -2,6 +2,8 @@ namespace AlfaRaceX.Desktop;
 
 internal static class SmokeTest
 {
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam);
     public static int Run()
     {
         try
@@ -85,8 +87,21 @@ internal static class SmokeTest
                 await window.Browser.CoreWebView2.CapturePreviewAsync(
                     Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, screenshot);
             }
+            // Inject a Windows notification burst; enumeration remains real and read-only.
+            // This verifies the OS message hook/debounce, not physical hotplug or role detection.
+            await window.Browser.ExecuteScriptAsync("window.__deviceRefreshCount=0; window.chrome.webview.addEventListener('message',e=>{if(e.data.type==='dashboard')window.__deviceRefreshCount++;});");
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+            for (int i = 0; i < 10; i++) SendMessage(hwnd, 0x0219, new IntPtr(0x0007), IntPtr.Zero);
+            deadline = DateTime.UtcNow.AddSeconds(5);
+            while (await window.Browser.ExecuteScriptAsync("window.__deviceRefreshCount === 1") != "true")
+            {
+                if (DateTime.UtcNow > deadline) throw new TimeoutException("Aggiornamento USB dopo notifica Windows non ricevuto.");
+                await Task.Delay(100);
+            }
+            await Task.Delay(750);
+            await AssertJs("window.__deviceRefreshCount === 1", "notifiche USB duplicate aggregate");
             await AssertJs("document.styleSheets.length >= 2 && typeof bootstrap === 'object'", "risorse Bootstrap locali");
-            File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), "PASS: WebView2, worker bridge, disclaimer persistito, preparazione reale dei tre firmware, controlli riattivati, sei viste, Bootstrap locale.");
+            File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), "PASS: WebView2, worker bridge, disclaimer persistito, preparazione reale dei tre firmware, controlli riattivati, sei viste, Bootstrap locale, notifica Windows USB e debounce con enumerazione reale (senza hotplug fisico).");
             return 0;
         }
         catch (Exception ex)

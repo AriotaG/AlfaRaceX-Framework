@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        InitializeDeviceNotifications();
         DesktopPaths.Ensure();
         _history.Initialize();
         int interrupted = _history.RecoverInterruptedOperations();
@@ -202,6 +203,8 @@ public partial class MainWindow : Window
 
     private async Task SendDashboardAsync()
     {
+        if (_windowClosed) return;
+        int generation = ++_dashboardGeneration;
         int? dfuCount;
         string? deviceError = null;
         try { dfuCount = await Task.Run(() => UsbDeviceEnumerator.FindDfuPaths().Count); }
@@ -212,6 +215,7 @@ public partial class MainWindow : Window
             Log("ERROR", "USB", "Enumerazione USB fallita: " + ex.Message);
         }
 
+        if (_windowClosed || generation != _dashboardGeneration) return;
         string firmwareVersion = _manifest?.Version ?? "—";
         string channel = _manifest?.Channel ?? "Release Candidate";
         Post("dashboard", new
