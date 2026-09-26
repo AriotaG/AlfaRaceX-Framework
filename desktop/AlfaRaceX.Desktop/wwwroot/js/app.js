@@ -5,6 +5,27 @@
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const host = (action, payload = {}) => window.chrome.webview.postMessage({ action, payload });
 
+  // Reuse the same real controls in every page where an operation can start.
+  const operationParts = { operationText: 'data-operation-text', operationPercent: 'data-operation-percent', operationProgress: 'data-operation-progress', cancelBtn: 'data-cancel-operation' };
+  ['backup', 'restore'].forEach(page => {
+    const card = $('operationCard').cloneNode(true);
+    card.removeAttribute('id');
+    Object.entries(operationParts).forEach(([id, attribute]) => {
+      const element = card.querySelector(`#${id}`);
+      element.removeAttribute('id');
+      element.setAttribute(attribute, '');
+    });
+    $(`page-${page}`).appendChild(card);
+  });
+
+  function renderOperation(message, progress) {
+    document.querySelectorAll('#operationText,[data-operation-text]').forEach(x => { x.textContent = message; });
+    if (progress == null) return;
+    const value = Math.max(0, Math.min(100, Number(progress) || 0));
+    document.querySelectorAll('#operationPercent,[data-operation-percent]').forEach(x => { x.textContent = `${value}%`; });
+    document.querySelectorAll('#operationProgress,[data-operation-progress]').forEach(x => { x.style.width = `${value}%`; });
+  }
+
   function showPage(name) {
     state.page = name;
     document.querySelectorAll('.page').forEach(x => x.classList.toggle('active', x.id === `page-${name}`));
@@ -97,6 +118,7 @@
     $('backupBtn').disabled = !deviceReady;
     $('importBtn').disabled = !allowed;
     $('cancelBtn').hidden = !state.busy;
+    document.querySelectorAll('[data-cancel-operation]').forEach(b => { b.hidden = !state.busy; });
     document.querySelectorAll('.flash-btn').forEach(b => {
       b.disabled = !deviceReady || !state.manifest?.targets?.some(t => t.id === b.dataset.role && t.prepared);
     });
@@ -140,19 +162,15 @@
       case 'log': if (state.page === 'logs') host('getLogs'); break;
       case 'busy': setBusy(d.value); break;
       case 'operationProgress':
-        $('operationText').textContent = d.message || 'Operazione in corso…';
-        $('operationPercent').textContent = `${d.progress ?? 0}%`;
-        $('operationProgress').style.width = `${Math.max(0, Math.min(100, d.progress ?? 0))}%`;
+        renderOperation(d.message || 'Operazione in corso…', d.progress ?? 0);
         break;
       case 'operationComplete':
-        $('operationText').textContent = d.message || 'Operazione completata.';
-        $('operationPercent').textContent = '100%';
-        $('operationProgress').style.width = '100%';
+        renderOperation(d.message || 'Operazione completata.', 100);
         toast(d.message || 'Operazione completata.', 'Completato');
         host('refreshDashboard');
         break;
-      case 'operationFailed': toast(d.message || 'Operazione fallita.', 'Errore'); break;
-      case 'operationCancelled': toast('Operazione annullata.', 'AlfaRaceX'); break;
+      case 'operationFailed': renderOperation(`Operazione fallita: ${d.message || 'consulta i log.'}`); toast(d.message || 'Operazione fallita.', 'Errore'); break;
+      case 'operationCancelled': renderOperation('Operazione annullata.'); toast('Operazione annullata.', 'AlfaRaceX'); break;
       case 'error': toast(d.message || 'Errore imprevisto.', 'Errore'); break;
     }
   });
@@ -173,6 +191,7 @@
   $('openBackupBtn').addEventListener('click', () => host('openBackupFolder'));
   $('importBtn').addEventListener('click', () => host('importBackup', { role: $('importRole').value }));
   $('cancelBtn').addEventListener('click', () => host('cancelOperation'));
+  document.querySelectorAll('[data-cancel-operation]').forEach(b => b.addEventListener('click', () => host('cancelOperation')));
   $('clearLogsBtn').addEventListener('click', () => { if (confirm('Pulire la cronologia dei log?')) host('clearLogs'); });
   $('repoBtn').addEventListener('click', () => host('openExternal', { url: 'https://github.com/AriotaG/AlfaRaceX-Framework' }));
   $('disclaimerRepoBtn').addEventListener('click', () => host('openExternal', { url: 'https://github.com/AriotaG/AlfaRaceX-Framework/blob/main/DISCLAIMER.md' }));

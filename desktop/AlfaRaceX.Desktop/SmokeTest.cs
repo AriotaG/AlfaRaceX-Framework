@@ -87,6 +87,8 @@ internal static class SmokeTest
                 await window.Browser.CoreWebView2.CapturePreviewAsync(
                     Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, screenshot);
             }
+            await AssertJs("document.querySelectorAll('.operation-card').length === 3 && [...document.querySelectorAll('#operationPercent,[data-operation-percent]')].every(x=>x.textContent==='100%')", "progresso reale visibile in aggiornamento, backup e ripristino");
+            await AssertJs("[...document.querySelectorAll('[id]')].map(x=>x.id).length === new Set([...document.querySelectorAll('[id]')].map(x=>x.id)).size", "nessun ID duplicato nei controlli operazione");
             // Inject a Windows notification burst; enumeration remains real and read-only.
             // This verifies the OS message hook/debounce, not physical hotplug or role detection.
             await window.Browser.ExecuteScriptAsync("window.__deviceRefreshCount=0; window.chrome.webview.addEventListener('message',e=>{if(e.data.type==='dashboard')window.__deviceRefreshCount++;});");
