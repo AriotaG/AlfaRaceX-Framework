@@ -7,6 +7,10 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="../../distribution/release-candidate.json" Link="release-candidate.json" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../../updater/AlfaRaceX.Updater/IntelHexImage.cs" Link="IntelHexImage.cs" />
+    <Compile Include="../../updater/AlfaRaceX.Updater/ManifestClient.cs" Link="ManifestClient.cs" />
+    <Compile Include="../../updater/AlfaRaceX.Updater/Models.cs" Link="Models.cs" />
+    <Compile Include="../../updater/AlfaRaceX.Updater/AppConstants.cs" Link="AppConstants.cs" />
   </ItemGroup>
 </Project>

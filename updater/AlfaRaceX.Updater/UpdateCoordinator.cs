@@ -15,6 +15,7 @@ internal sealed class UpdateCoordinator
         IProgress<(string Message, int Progress)> progress,
         CancellationToken ct)
     {
+        ManifestClient.ValidateManifest(manifest);
         string root = Path.Combine(Path.GetTempPath(), "AlfaRaceX-Updater", manifest.Version);
         var prepared = new List<PreparedFirmware>();
 

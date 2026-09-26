@@ -71,7 +71,79 @@ try
         var image = Load("", upper, payload, Record(3, 0, 0, 0, 0, 0), Record(5, 0, 8, 0, 0, 1), eof, " ");
         if (image.Bytes.Count != 10) throw new Exception("Start record changed data");
     });
+    UpdateManifest Manifest() => new() { Product = "AlfaRaceX", Version = "1.0.0-rc5",
+        Targets = new[] { "BH", "C2", "C1" }.Select(role => new FirmwareTarget {
+            Id = role, Sha256 = new string('a', 64), ApplicationStart = 0x08000000,
+            ApplicationLimitExclusive = role == "C1" ? 0x08018000u : 0x0800F000u,
+            Url = $"https://github.com/AriotaG/AlfaRaceX-Framework/releases/download/1.0.0-rc5/AlfaRaceX-{role}.hex"
+        }).ToList() };
+    Test("valid manifest", () => ManifestClient.ValidateManifest(Manifest()));
+    Test("duplicate MCU", () => Reject(() => { var m = Manifest(); m.Targets[1] = m.Targets[0]; ManifestClient.ValidateManifest(m); }));
+    Test("reserved flash area", () => Reject(() => { var m = Manifest(); m.Targets[0].ApplicationLimitExclusive = 0x08020000; ManifestClient.ValidateManifest(m); }));
+    Test("manifest path traversal", () => Reject(() => { var m = Manifest(); m.Version = "../../outside"; ManifestClient.ValidateManifest(m); }));
+    Test("wrong role asset URL", () => Reject(() => { var m = Manifest(); m.Targets[0].Url = m.Targets[1].Url; ManifestClient.ValidateManifest(m); }));
+    Test("untrusted download URL", () => Reject(() => { var m = Manifest(); m.Targets[0].Url = "http://example.com/file.hex"; ManifestClient.ValidateManifest(m); }));
+    Test("invalid manifest hash", () => Reject(() => { var m = Manifest(); m.Targets[0].Sha256 = "bad"; ManifestClient.ValidateManifest(m); }));
+    Test("null targets", () => Reject(() => { var m = Manifest(); m.Targets = null!; ManifestClient.ValidateManifest(m); }));
+    Test("null target entry", () => Reject(() => { var m = Manifest(); m.Targets[0] = null!; ManifestClient.ValidateManifest(m); }));
+    Test("foreign product", () => Reject(() => { var m = Manifest(); m.Product = "Other"; ManifestClient.ValidateManifest(m); }));
+    Test("wrong application start", () => Reject(() => { var m = Manifest(); m.Targets[0].ApplicationStart++; ManifestClient.ValidateManifest(m); }));
+    Test("repository manifest remains compatible", () => {
+        var m = System.Text.Json.JsonSerializer.Deserialize<UpdateManifest>(File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "release-candidate.json")))!;
+        ManifestClient.ValidateManifest(m);
+    });
+    void DownloadCase(byte[] bytes, bool validHash, bool reject)
+    {
+        string dir = Path.Combine(root, Guid.NewGuid().ToString("N"));
+        var target = Manifest().Targets[0];
+        target.Sha256 = validHash ? Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)) : new string('0', 64);
+        var client = new ManifestClient(new TestResponseHandler(bytes));
+        void Run() => client.DownloadVerifiedAsync(target, dir, null, CancellationToken.None).GetAwaiter().GetResult();
+        if (reject)
+        {
+            Reject(Run);
+            if (Directory.EnumerateFiles(dir).Any()) throw new Exception("Partial download left behind");
+        }
+        else
+        {
+            Run();
+            if (!File.ReadAllBytes(Directory.EnumerateFiles(dir).Single()).SequenceEqual(bytes)) throw new Exception("Download bytes changed");
+        }
+    }
+    Test("verified download preserves bytes", () => DownloadCase([1, 2, 3, 4], true, false));
+    Test("download wrong hash leaves no partial file", () => DownloadCase([1, 2, 3, 4], false, true));
+    Test("oversized download rejected", () => DownloadCase(new byte[1024 * 1024 + 1], true, true));
+    Test("repeated download preserves earlier file", () => {
+        byte[] bytes = [1, 2, 3, 4];
+        var target = Manifest().Targets[0];
+        target.Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+        var client = new ManifestClient(new TestResponseHandler(bytes));
+        string dir = Path.Combine(root, "repeat");
+        string first = client.DownloadVerifiedAsync(target, dir, null, CancellationToken.None).GetAwaiter().GetResult();
+        string second = client.DownloadVerifiedAsync(target, dir, null, CancellationToken.None).GetAwaiter().GetResult();
+        if (first == second || !File.ReadAllBytes(first).SequenceEqual(bytes) || !File.ReadAllBytes(second).SequenceEqual(bytes))
+            throw new Exception("Existing download overwritten");
+    });
+    Test("cancelled download leaves no file", () => {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        string dir = Path.Combine(root, "cancelled");
+        var client = new ManifestClient(new TestResponseHandler([1, 2]));
+        try { client.DownloadVerifiedAsync(Manifest().Targets[0], dir, null, cancellation.Token).GetAwaiter().GetResult(); }
+        catch (OperationCanceledException) {
+            if (Directory.EnumerateFiles(dir).Any()) throw new Exception("Cancelled download retained");
+            return;
+        }
+        throw new Exception("Cancellation ignored");
+    });
 }
 finally { Directory.Delete(root, true); }
 Console.WriteLine($"Failed: {failed}");
 return failed == 0 ? 0 : 1;
+// In-memory HTTP fixture: exercises download validation without a network or device.
+sealed class TestResponseHandler(byte[] bytes) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+        Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) });
+}
