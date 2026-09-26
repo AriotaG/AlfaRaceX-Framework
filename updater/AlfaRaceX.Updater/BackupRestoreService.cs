@@ -143,7 +143,8 @@ internal sealed class BackupRestoreService
         CancellationToken ct,
         string? expectedSha256 = null,
         string? safetyBackupFolder = null,
-        Action<BackupResult>? backupCreated = null)
+        Action<BackupResult>? backupCreated = null,
+        Func<string, string, bool>? confirmTarget = null)
     {
         role = NormalizeRole(role);
 
@@ -154,6 +155,7 @@ internal sealed class BackupRestoreService
             progress.Report(($"Connessione DFU {role}...", 0));
             using var dfu = _openDevice();
 
+            RequireTargetConfirmation(dfu, role, confirmTarget, log, ct);
             CaptureSafetyBackup(dfu, role, safetyBackupFolder, log, ct, backupCreated);
             ct.ThrowIfCancellationRequested();
             log($"Ripristino {role}: SHA-256 {hash}.");
@@ -179,6 +181,18 @@ internal sealed class BackupRestoreService
 
             progress.Report(($"Ripristino {role} completato.", 100));
         }, ct);
+    }
+
+    internal static void RequireTargetConfirmation(IDfuDevice device, string role,
+        Func<string, string, bool>? confirmTarget, Action<string> log, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (confirmTarget is null || string.IsNullOrWhiteSpace(device.DevicePath))
+            throw new InvalidOperationException("Scrittura DFU bloccata: manca la conferma del modulo fisico sul dispositivo aperto.");
+        if (!confirmTarget(role, device.DevicePath))
+            throw new OperationCanceledException("Scrittura DFU annullata: modulo fisico non confermato.");
+        ct.ThrowIfCancellationRequested();
+        log($"Ruolo {role} confermato manualmente per {device.DevicePath}; il VID/PID DFU non identifica il ruolo. Stessa sessione per backup e scrittura.");
     }
 
     internal static BackupResult CaptureSafetyBackup(IDfuDevice device, string role, string? folder,

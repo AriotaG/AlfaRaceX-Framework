@@ -48,7 +48,8 @@ internal sealed class UpdateCoordinator
         Action<string> log,
         CancellationToken ct,
         string? safetyBackupFolder = null,
-        Action<BackupResult>? backupCreated = null)
+        Action<BackupResult>? backupCreated = null,
+        Func<string, string, bool>? confirmTarget = null)
     {
         return Task.Run(() =>
         {
@@ -56,6 +57,7 @@ internal sealed class UpdateCoordinator
             ManifestClient.ValidateTarget(firmware.Target);
             firmware.Image.ValidateApplicationRange(firmware.Target.ApplicationStart, firmware.Target.ApplicationLimitExclusive);
             using var dfu = _openDevice();
+            BackupRestoreService.RequireTargetConfirmation(dfu, firmware.Target.Id, confirmTarget, log, ct);
             BackupRestoreService.CaptureSafetyBackup(dfu, firmware.Target.Id, safetyBackupFolder, log, ct, backupCreated);
             ct.ThrowIfCancellationRequested();
 

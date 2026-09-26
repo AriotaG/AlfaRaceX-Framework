@@ -5,6 +5,7 @@ namespace AlfaRaceX.Updater;
 
 internal interface IDfuDevice : IDisposable
 {
+    string DevicePath { get; }
     byte[] ReadMemory(uint address, int length, IProgress<int>? progress, CancellationToken ct);
     void ProgramAndVerify(IntelHexImage image, uint pageSize, IProgress<int>? progress, Action<string>? log, CancellationToken ct);
     void ProgramRawAndVerify(uint address, byte[] data, uint pageSize, IProgress<int>? progress, Action<string>? log, CancellationToken ct);
@@ -27,11 +28,13 @@ internal sealed class DfuDevice : IDfuDevice
     private readonly SafeFileHandle _file;
     private IntPtr _usb;
     public int TransferSize { get; }
+    public string DevicePath { get; }
 
-    private DfuDevice(SafeFileHandle file, IntPtr usb)
+    private DfuDevice(SafeFileHandle file, IntPtr usb, string devicePath)
     {
         _file = file;
         _usb = usb;
+        DevicePath = devicePath;
         if (!WinUsbNative.WinUsb_SetCurrentAlternateSetting(_usb, 0))
             WinUsbNative.ThrowLast("Impossibile selezionare l'interfaccia DFU.");
         TransferSize = ReadTransferSize();
@@ -68,7 +71,7 @@ internal sealed class DfuDevice : IDfuDevice
 
         try
         {
-            var device = new DfuDevice(file, usb);
+            var device = new DfuDevice(file, usb, paths[0]);
             device.NormalizeState();
             return device;
         }

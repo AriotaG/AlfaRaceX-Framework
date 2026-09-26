@@ -297,7 +297,7 @@ public partial class MainWindow : Window
                 Post("operationProgress", new { kind = "flash", role, message = p.Message, progress = p.Progress }));
 
             Log("INFO", "FLASH", $"Avvio programmazione {role} firmware {_manifest?.Version}.");
-            await _updates.FlashAsync(firmware, progress, msg => Log("INFO", "DFU", msg), ct, DesktopPaths.Backups, CatalogSafetyBackup);
+            await _updates.FlashAsync(firmware, progress, msg => Log("INFO", "DFU", msg), ct, DesktopPaths.Backups, CatalogSafetyBackup, ConfirmDfuTarget);
             Log("INFO", "FLASH", $"Programmazione {role} completata e verificata.");
             Post("operationComplete", new { kind = "flash", role, message = $"{role} programmato e verificato." });
         });
@@ -353,12 +353,21 @@ public partial class MainWindow : Window
                 backup.BinPath,
                 progress,
                 msg => Log("INFO", "DFU", msg),
-                ct, backup.Sha256, DesktopPaths.Backups, CatalogSafetyBackup);
+                ct, backup.Sha256, DesktopPaths.Backups, CatalogSafetyBackup, ConfirmDfuTarget);
 
             Log("INFO", "RESTORE", $"Ripristino {backup.Role} completato e verificato.");
             Post("operationComplete", new { kind = "restore", role = backup.Role, message = $"Ripristino {backup.Role} completato." });
         });
     }
+
+    private bool ConfirmDfuTarget(string role, string devicePath) => Dispatcher.Invoke(() =>
+        MessageBox.Show(this,
+            $"Il dispositivo DFU non comunica il ruolo BH/C2/C1.\n\n" +
+            $"Confermi di avere collegato fisicamente il modulo {role}?\n\n" +
+            $"Dispositivo aperto:\n{devicePath}\n\n" +
+            "La scrittura modifica il firmware. In caso di dubbio scegli No e verifica il collegamento.",
+            $"Conferma modulo {role}", MessageBoxButton.YesNo, MessageBoxImage.Warning,
+            MessageBoxResult.No) == MessageBoxResult.Yes);
 
     private void CatalogSafetyBackup(BackupResult backup)
     {
