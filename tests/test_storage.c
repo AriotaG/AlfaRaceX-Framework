@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #define BASE 0x0801E800u
 #define SIZE 0x1800u
@@ -83,6 +84,11 @@ int main(void) {
     float z=arx_storage_read_best_seconds(&b,2);
     assert(a>6.320f&&a<6.322f);
     assert(z>17.455f&&z<17.457f);
+    assert(!arx_storage_write_best_seconds(&b,NAN,1.0f));
+    assert(!arx_storage_write_best_seconds(&b,1.0f,INFINITY));
+    assert(!arx_storage_write_best_seconds(&b,1.0e30f,1.0f));
+    assert(arx_storage_read_best_seconds(&b,1)==a); /* Invalid inputs cannot erase saved times. */
+    assert(arx_storage_read_best_seconds(&b,3)==0.0f);
 
     puts("storage tests: OK");
     return 0;
