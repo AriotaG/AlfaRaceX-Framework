@@ -67,6 +67,20 @@ int main(void) {
     memset(oversized_hex,'A',sizeof(oversized_hex)-1u);
     oversized_hex[sizeof(oversized_hex)-1u]='\0';
     assert(!arx_elm327_prepare_request(&e,oversized_hex,&raw_req));
+    char maximum_hex[ARX_ELM_MAX_PAYLOAD*3u+3u];
+    for(size_t i=0;i<ARX_ELM_MAX_PAYLOAD;i++)memcpy(&maximum_hex[i*3u],"aF\t",3u);
+    maximum_hex[ARX_ELM_MAX_PAYLOAD*3u]='\0';
+    assert(arx_elm327_prepare_request(&e,maximum_hex,&raw_req));
+    assert(raw_req.length==ARX_ELM_MAX_PAYLOAD);
+    for(size_t i=0;i<ARX_ELM_MAX_PAYLOAD;i++)assert(raw_req.data[i]==0xAFu);
+    ArxElmRequest preserved=raw_req;
+    memcpy(&maximum_hex[ARX_ELM_MAX_PAYLOAD*3u],"00",3u);
+    assert(!arx_elm327_prepare_request(&e,maximum_hex,&raw_req));
+    assert(memcmp(&preserved,&raw_req,sizeof(raw_req))==0);
+    assert(!arx_elm327_prepare_request(&e,"010203z4",&raw_req));
+    assert(memcmp(&preserved,&raw_req,sizeof(raw_req))==0);
+    assert(arx_elm327_prepare_request(&e," \r\n0\t1 a\nf\r",&raw_req));
+    assert(raw_req.length==2u&&raw_req.data[0]==1u&&raw_req.data[1]==0xAFu);
 
     /* The wildcard-filter parser was tested above; clear it for the transport test. */
     arx_elm327_command(&e,"ATCRA",reply,sizeof(reply));
