@@ -71,7 +71,7 @@ jobs:
           $profile = Join-Path $env:RUNNER_TEMP "AlfaRaceX-UI-Smoke-$([guid]::NewGuid().ToString('N'))"
           "ARX_UI_SMOKE_ROOT=$profile" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           $proc = Start-Process -FilePath ".\publish\AlfaRaceX.exe" -ArgumentList @("--ui-smoke-test", "`"--smoke-root=$profile`"") -WindowStyle Hidden -PassThru
-          if (-not $proc.WaitForExit(60000)) {
+          if (-not $proc.WaitForExit(120000)) {
             Stop-Process -Id $proc.Id -Force
             throw "WebView2 UI smoke test timed out."
           }

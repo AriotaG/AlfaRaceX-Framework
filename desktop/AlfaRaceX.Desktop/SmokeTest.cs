@@ -68,6 +68,14 @@ internal static class SmokeTest
             var repository = new HistoryRepository(DesktopPaths.Database);
             if (string.IsNullOrEmpty(repository.GetSetting("DisclaimerAcceptedUtc")))
                 throw new InvalidOperationException("Accettazione disclaimer non persistita.");
+            // Real UI -> backend -> release download -> HEX/hash validation. Never flash a device.
+            await window.Browser.ExecuteScriptAsync("document.getElementById('prepareBtn').click()");
+            deadline = DateTime.UtcNow.AddSeconds(60);
+            while (await window.Browser.ExecuteScriptAsync("document.querySelectorAll('.flash-btn:not(:disabled)').length === 3") != "true")
+            {
+                if (DateTime.UtcNow > deadline) throw new TimeoutException("Preparazione firmware reale o riattivazione dei controlli non completata.");
+                await Task.Delay(250);
+            }
             foreach (string page in new[] { "dashboard", "update", "backup", "restore", "logs", "info" })
             {
                 await window.Browser.ExecuteScriptAsync($"document.querySelector('.nav-item[data-page={page}]').click()");
@@ -78,7 +86,7 @@ internal static class SmokeTest
                     Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, screenshot);
             }
             await AssertJs("document.styleSheets.length >= 2 && typeof bootstrap === 'object'", "risorse Bootstrap locali");
-            File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), "PASS: WebView2, bridge, disclaimer persistito, sei viste, Bootstrap locale.");
+            File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), "PASS: WebView2, worker bridge, disclaimer persistito, preparazione reale dei tre firmware, controlli riattivati, sei viste, Bootstrap locale.");
             return 0;
         }
         catch (Exception ex)
