@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const state = { page: 'dashboard', backupRole: 'BH', busy: false, appInfo: {}, backups: [], manifest: null, disclaimerAccepted: false };
+  const state = { page: 'dashboard', backupRole: 'BH', busy: false, dfuCount: null, appInfo: {}, backups: [], manifest: null, disclaimerAccepted: false };
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const host = (action, payload = {}) => window.chrome.webview.postMessage({ action, payload });
@@ -24,6 +24,8 @@
   }
 
   function renderDashboard(d) {
+    state.dfuCount = d.deviceError || d.dfuCount == null ? null : Number(d.dfuCount);
+    updateControls();
     $('metricFirmware').textContent = d.firmwareVersion || '—';
     $('metricChannel').textContent = d.channel || '—';
     $('metricBackups').textContent = d.backupCount ?? 0;
@@ -59,6 +61,7 @@
       if (confirm(`Programmare il modulo ${b.dataset.role}?\n\nCollega un solo modulo in DFU e verifica la porta fisica. Il ruolo MCU non è riconosciuto automaticamente. Verrà creato un backup prima della scrittura.`))
         host('flashRole', { role: b.dataset.role });
     }));
+    updateControls();
   }
 
   function renderBackups(items) {
@@ -80,20 +83,31 @@
       if (item && confirm(`Ripristinare il modulo ${item.role} dal backup ${item.fileName}?\n\nL'operazione riscrive la Flash del modulo collegato.`))
         host('restoreBackup', { id: Number(b.dataset.id) });
     }));
+    updateControls();
   }
 
   function renderLogs(items) {
     $('logList').innerHTML = (items || []).map(x => `<div class="log-row ${esc(x.level)}"><span class="ts">${esc(new Date(x.createdUtc).toLocaleString('it-IT'))}</span><span class="lvl">${esc(x.level)}</span><span class="cat">${esc(x.category)}</span><span>${esc(x.message)}</span></div>`).join('');
   }
 
+  function updateControls() {
+    const allowed = state.disclaimerAccepted && !state.busy;
+    const deviceReady = allowed && state.dfuCount === 1;
+    $('prepareBtn').disabled = !allowed;
+    $('backupBtn').disabled = !deviceReady;
+    $('importBtn').disabled = !allowed;
+    $('cancelBtn').hidden = !state.busy;
+    document.querySelectorAll('.flash-btn').forEach(b => {
+      b.disabled = !deviceReady || !state.manifest?.targets?.some(t => t.id === b.dataset.role && t.prepared);
+    });
+    document.querySelectorAll('.restore').forEach(b => {
+      b.disabled = !deviceReady || !state.backups.some(x => x.id === Number(b.dataset.id) && x.exists);
+    });
+  }
+
   function setBusy(value) {
     state.busy = !!value;
-    $('prepareBtn').disabled = state.busy;
-    $('backupBtn').disabled = state.busy;
-    $('importBtn').disabled = state.busy;
-    $('cancelBtn').hidden = !state.busy;
-    if (state.manifest) renderManifest(state.manifest);
-    renderBackups(state.backups);
+    updateControls();
   }
 
   window.chrome.webview.addEventListener('message', ev => {
@@ -108,11 +122,13 @@
         $('infoBackup').textContent = d.backupRoot;
         $('infoDb').textContent = d.database;
         $('disclaimerGate').hidden = state.disclaimerAccepted;
+        updateControls();
         $('recoveryNotice').hidden = !(d.interruptedOperations > 0);
         $('recoveryNotice').textContent = `Il registro contiene ${d.interruptedOperations || 0} operazioni interrotte senza esito. Consulta i log e verifica backup e dispositivo prima di nuove scritture. Nessuna operazione viene ripresa automaticamente.`;
         break;
       case 'disclaimerAccepted':
         state.disclaimerAccepted = true;
+        updateControls();
         $('disclaimerGate').hidden = true;
         toast('Disclaimer registrato. / Disclaimer accepted.', 'AlfaRaceX');
         break;
@@ -163,5 +179,6 @@
   $('disclaimerAcceptBtn').addEventListener('click', () => host('acceptDisclaimer'));
   $('disclaimerExitBtn').addEventListener('click', () => host('exitApplication'));
 
+  updateControls();
   host('initialize');
 })();

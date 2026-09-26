@@ -73,7 +73,7 @@ internal static class SmokeTest
             // Real UI -> backend -> release download -> HEX/hash validation. Never flash a device.
             await window.Browser.ExecuteScriptAsync("document.getElementById('prepareBtn').click()");
             deadline = DateTime.UtcNow.AddSeconds(60);
-            while (await window.Browser.ExecuteScriptAsync("document.querySelectorAll('.flash-btn:not(:disabled)').length === 3") != "true")
+            while (await window.Browser.ExecuteScriptAsync("document.querySelectorAll('.target-card.prepared').length === 3 && !document.getElementById('prepareBtn').disabled") != "true")
             {
                 if (DateTime.UtcNow > deadline) throw new TimeoutException("Preparazione firmware reale o riattivazione dei controlli non completata.");
                 await Task.Delay(250);
@@ -100,6 +100,14 @@ internal static class SmokeTest
             }
             await Task.Delay(750);
             await AssertJs("window.__deviceRefreshCount === 1", "notifiche USB duplicate aggregate");
+            // Internal UI fixtures only; never issue a hardware command.
+            foreach (int? count in new int?[] { null, 0, 2 })
+            {
+                window.Post("dashboard", new { dfuCount = count, deviceError = count is null ? "test enumeration failure" : null });
+                await Task.Delay(100);
+                await AssertJs("document.getElementById('backupBtn').disabled && document.querySelectorAll('.flash-btn:not(:disabled),.restore:not(:disabled)').length === 0", "operazioni bloccate senza un singolo DFU");
+            }
+            SendMessage(hwnd, 0x0219, new IntPtr(0x0007), IntPtr.Zero); // Restore real enumeration.
             await AssertJs("document.styleSheets.length >= 2 && typeof bootstrap === 'object'", "risorse Bootstrap locali");
             File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), "PASS: WebView2, worker bridge, disclaimer persistito, preparazione reale dei tre firmware, controlli riattivati, sei viste, Bootstrap locale, notifica Windows USB e debounce con enumerazione reale (senza hotplug fisico).");
             return 0;
