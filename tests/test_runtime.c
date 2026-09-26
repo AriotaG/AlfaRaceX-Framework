@@ -109,6 +109,15 @@ static void elm_runtime_unit(void){
     }
     assert(found_request);
 
+    /* A valid ISO-TP packet from an unrelated ECU must not complete the USB request. */
+    const uint32_t request_deadline=c1.elm_deadline_ms;
+    ArxCanFrame unrelated={.bus=ARX_BUS_C1,.id=0x123u,.dlc=4u,.data={3,0x62,0xF1,0x90}};
+    arx_runtime_on_can(&c1,&unrelated,100u);
+    assert(c1.elm_request_active && c1.elm_deadline_ms==request_deadline);
+    unrelated.id=0x7E8u;unrelated.extended_id=true;
+    arx_runtime_on_can(&c1,&unrelated,100u);
+    assert(c1.elm_request_active && c1.elm_deadline_ms==request_deadline);
+
     ArxCanFrame rsp={.bus=ARX_BUS_C1,.id=0x7E8u,.dlc=8u,
         .data={0x04u,0x41u,0x0Cu,0x1Au,0xF8u,0u,0u,0u}};
     arx_runtime_on_can(&c1,&rsp,101u);

@@ -100,6 +100,9 @@ foreach(test_name
     target_contract
     isotp_elm
     isotp_integrity
+    elm_isolation
+    interchip_stress
+    can_backpressure
     storage
     drive_led_usb
     runtime

@@ -12,6 +12,12 @@ bool arx_link_validate(const ArxLinkFrame *f) {
     if (!f) return false;
     const uint8_t d=f->raw[0];
     if (d!=ARX_LINK_TO_C2 && d!=ARX_LINK_TO_BH && d!=ARX_LINK_TO_MASTER) return false;
+    if (f->raw[1]<ARX_LINK_REQ || f->raw[1]>ARX_LINK_ARM ||
+        f->raw[7]>8u || f->raw[18]!=0x20u) return false;
+    if (f->raw[1]==ARX_LINK_REQ || f->raw[1]==ARX_LINK_RSP || f->raw[1]==ARX_LINK_FCCFG) {
+        const uint32_t max_id=(f->raw[2]&ARX_LINK_FLAG_EXTID)?0x1FFFFFFFu:0x7FFu;
+        if (arx_link_can_id(f)>max_id) return false;
+    }
     return arx_link_checksum(f->raw)==f->raw[17];
 }
 

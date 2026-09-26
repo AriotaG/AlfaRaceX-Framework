@@ -108,6 +108,7 @@ static ArxStatus can_sender(const ArxCanFrame *f,void *user) {
     (void)user;
     CAN_HandleTypeDef *h=arx_stm32_can_handle();
     if(!h||!f)return ARX_STATUS_INVALID;
+    if(HAL_CAN_GetTxMailboxesFreeLevel(h)==0u)return ARX_STATUS_FULL;
 
     CAN_TxHeaderTypeDef tx={0};
     tx.RTR=CAN_RTR_DATA;

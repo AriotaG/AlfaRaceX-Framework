@@ -68,20 +68,30 @@ void arx_interchip_note_master_request(
     ArxInterchip *link,
     uint32_t now_ms
 ) {
-    if (link) link->last_master_request_ms = now_ms;
+    if (link) {
+        link->last_master_request_ms = now_ms;
+        link->reply_window_open = true;
+    }
+}
+
+bool arx_interchip_ready(ArxInterchip *link, uint32_t now_ms) {
+    if (!link) return false;
+    if (now_ms >= link->boot_ignore_ms) link->boot_complete = true;
+    return link->boot_complete;
 }
 
 bool arx_interchip_tx_allowed(
-    const ArxInterchip *link,
+    ArxInterchip *link,
     uint32_t now_ms
 ) {
-    if (!link || now_ms < link->boot_ignore_ms) return false;
+    if (!arx_interchip_ready(link, now_ms)) return false;
 
     if (link->role == ARX_IC_ROLE_C1) {
         return (uint32_t)(now_ms - link->last_tx_ms) >
                link->master_tx_period_ms;
     }
 
-    return (uint32_t)(now_ms - link->last_master_request_ms) <
-           link->slave_reply_window_ms;
+    if ((uint32_t)(now_ms - link->last_master_request_ms) >= link->slave_reply_window_ms)
+        link->reply_window_open = false;
+    return link->reply_window_open;
 }

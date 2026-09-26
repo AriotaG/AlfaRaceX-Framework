@@ -1808,7 +1808,7 @@ size_t arx_runtime_drain_interchip(ArxRuntime *rt,uint32_t now_ms,size_t budget)
     while(sent<budget){
         uint8_t diag_offset=0u;
         if(interchip_diag_offset(&rt->interchip.tx,&diag_offset)){
-            if(now_ms<rt->interchip.boot_ignore_ms)break;
+            if(!arx_interchip_ready(&rt->interchip,now_ms))break;
             const uint8_t index=(uint8_t)(
                 (rt->interchip.tx.head+diag_offset)%ARX_INTERCHIP_QUEUE_SIZE
             );

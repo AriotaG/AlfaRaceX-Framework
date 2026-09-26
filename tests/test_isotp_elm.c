@@ -81,6 +81,8 @@ int main(void) {
     assert(arx_elm_router_candidates(&router,&e,order)==1u && order[0]==ARX_ELM_BUS_C2);
 
     /* Automatic formatting transaction: request becomes ISO-TP SF. */
+    e.tx_header=0x18DA10F1u;
+    e.tx_extended=true;
     ArxElmTransaction tr;
     const uint8_t req[]={0x22,0xF1,0x90};
     assert(arx_elm_transaction_start(&tr,&e,ARX_BUS_C1,req,3,0,100,&f));
