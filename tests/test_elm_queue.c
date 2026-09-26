@@ -39,6 +39,24 @@ int main(void){
     CHECK(arx_runtime_drain_can(&rt,104,1)==1);
     CHECK(last.id==0x7E0 && last.data[0]==0x22 && last.data[1]==13);
     CHECK(rt.elm_transaction.tx.state==ARX_ISOTP_TX_COMPLETE);
+    /* A stalled USB host must not receive a truncated ECU response as success. */
+    memset(rt.elm_usb_tx,'X',sizeof(rt.elm_usb_tx));
+    rt.elm_usb_tx_off=0;rt.elm_usb_tx_len=sizeof(rt.elm_usb_tx)-2;
+    ArxCanFrame response={.bus=ARX_BUS_C1,.id=0x7E8,.dlc=4,.data={3,0x62,1,2}};
+    arx_runtime_on_can(&rt,&response,105);
+    CHECK(!rt.elm_request_active);
+    CHECK(rt.elm_usb_tx_len==sizeof(rt.elm_usb_tx)-2);
+    CHECK(rt.elm_usb_tx[rt.elm_usb_tx_len]=='X');
+    CHECK(rt.elm_output_overflow);
+    arx_runtime_usb_rx(&rt,mutate,sizeof(mutate)-1,106);
+    CHECK(rt.elm.tx_header==0x7E0u); /* No execution until the overflow is reported. */
+    arx_runtime_tick(&rt,107);
+    CHECK(rt.elm_output_overflow); /* Error is retained while the host is stalled. */
+    rt.elm_usb_tx_off=rt.elm_usb_tx_len; /* Host has finally consumed the old bytes. */
+    arx_runtime_tick(&rt,108);
+    CHECK(!rt.elm_output_overflow);
+    CHECK(rt.elm_usb_tx_len==strlen("\rBUFFER FULL\r>"));
+    CHECK(memcmp(rt.elm_usb_tx,"\rBUFFER FULL\r>",rt.elm_usb_tx_len)==0);
     puts("ELM full TX queue retains ISO-TP offset; active transaction rejects config mutation: PASS");
     return 0;
 }

@@ -142,8 +142,19 @@ static void elm_usb_hex_id(ArxRuntime *rt,uint32_t id,bool extended) {
     (void)elm_usb_queue(rt,out,digits);
 }
 
-static void elm_usb_emit_event(ArxRuntime *rt,const ArxElmRxEvent *event) {
-    if(!rt||!event)return;
+static bool elm_usb_emit_event(ArxRuntime *rt,const ArxElmRxEvent *event) {
+    if(!rt||!event)return false;
+    /* Reserve the entire formatted response plus final prompt before emitting
+       any byte. An unconsumed USB queue must not turn truncation into success. */
+    const size_t line_end=rt->elm.linefeeds?2u:1u;
+    const size_t required=(rt->elm.headers?(event->extended_id?9u:4u):0u)+
+        2u*event->length+(rt->elm.spaces&&event->length?event->length-1u:0u)+
+        2u*line_end+1u;
+    elm_usb_compact(rt);
+    if(required>sizeof(rt->elm_usb_tx)-rt->elm_usb_tx_len){
+        rt->elm_output_overflow=true;
+        return false;
+    }
     if(rt->elm.headers){
         elm_usb_hex_id(rt,event->can_id,event->extended_id);
         (void)elm_usb_text(rt," ");
@@ -153,6 +164,7 @@ static void elm_usb_emit_event(ArxRuntime *rt,const ArxElmRxEvent *event) {
         if(rt->elm.spaces&&i+1u<event->length)(void)elm_usb_text(rt," ");
     }
     elm_usb_line_end(rt);
+    return true;
 }
 
 static void elm_usb_no_data(ArxRuntime *rt) {
@@ -302,8 +314,8 @@ static void elm_handle_response(
     if(kind==ARX_ELM_RX_PENDING)return;
 
     if(kind==ARX_ELM_RX_RAW_FRAME||kind==ARX_ELM_RX_PAYLOAD){
-        elm_usb_emit_event(rt,&event);
-        elm_finish_request(rt,true);
+        const bool emitted=elm_usb_emit_event(rt,&event);
+        elm_finish_request(rt,emitted);
         return;
     }
 
@@ -334,6 +346,14 @@ static void elm_tick(ArxRuntime *rt,uint32_t now_ms) {
 
 static void elm_process_line(ArxRuntime *rt,uint32_t now_ms) {
     if(!rt||rt->elm_line_len==0u)return;
+    elm_usb_compact(rt);
+    /* Covers command echo, the largest AT reply and error/prompt framing. */
+    if(rt->elm_output_overflow||sizeof(rt->elm_usb_tx)-rt->elm_usb_tx_len<
+       sizeof(rt->elm_line)+192u+8u){
+        rt->elm_output_overflow=true;
+        rt->elm_line_len=0u;
+        return;
+    }
     rt->elm_line[rt->elm_line_len]='\0';
 
     if(rt->elm.echo){
@@ -1725,6 +1745,10 @@ static void periodic_usb(ArxRuntime *rt,uint32_t now_ms) {
 #if ARX_COMPILE_C1
     if(rt->role==ARX_RUNTIME_C1){
         elm_tick(rt,now_ms);
+        if(rt->elm_output_overflow){
+            const char *error=rt->elm.linefeeds?"\r\nBUFFER FULL\r\n>":"\rBUFFER FULL\r>";
+            if(elm_usb_text(rt,error))rt->elm_output_overflow=false;
+        }
         if(rt->ops.usb_send&&
            rt->usb_mode.mode==ARX_USB_MODE_DIAGNOSTIC&&
            rt->usb_mode.state==ARX_USB_CONFIGURED&&
