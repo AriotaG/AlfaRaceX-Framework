@@ -346,7 +346,14 @@ public partial class MainWindow : Window
                 "local");
 
             Log("INFO", "BACKUP", $"Backup {role} catalogato: {Path.GetFileName(result.BinPath)}.");
-            Post("operationComplete", new { kind = "backup", role, message = $"Backup {role} completato.", sha256 = result.Sha256 });
+            Post("operationComplete", new
+            {
+                kind = "backup", role,
+                message = $"Backup {role} completato e verificato: {result.Size:N0} byte in {result.Elapsed.TotalSeconds:F1} s.\n" +
+                    $"File: {result.BinPath}\nSHA-256: {result.Sha256}",
+                sha256 = result.Sha256, binPath = result.BinPath, metadataPath = result.MetadataPath,
+                size = result.Size, elapsedSeconds = result.Elapsed.TotalSeconds, devicePath = result.DevicePath
+            });
             SendBackups();
             await SendDashboardAsync();
         });

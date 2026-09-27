@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Diagnostics;
 
 namespace AlfaRaceX.Updater;
 
@@ -9,7 +10,18 @@ internal sealed record BackupResult(
     string BinPath,
     string MetadataPath,
     string Sha256,
-    int Size);
+    int Size)
+{
+    public string? DevicePath { get; init; }
+    public TimeSpan Elapsed { get; init; }
+}
+
+// Nested worker progress must preserve operation order; the outer UI progress
+// object is responsible for dispatching to its synchronization context.
+internal sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
+{
+    public void Report(T value) => report(value);
+}
 
 internal sealed class BackupMetadata
 {
@@ -21,6 +33,7 @@ internal sealed class BackupMetadata
     public int FlashSize { get; set; }
     public string Sha256 { get; set; } = "";
     public string FileName { get; set; } = "";
+    public string? DevicePath { get; set; }
     public string RoleEvidence { get; set; } = "user-selected; physical MCU role not verified";
     public string Scope { get; set; } = "internal-flash-only; excludes option bytes, OTP and system ROM";
 }
@@ -47,22 +60,23 @@ internal sealed class BackupRestoreService
 
         return Task.Run(() =>
         {
+            var elapsed = Stopwatch.StartNew();
             Directory.CreateDirectory(destinationFolder);
 
             progress.Report(($"Connessione DFU {role}...", 0));
             using var dfu = _openDevice();
 
             log($"Backup {role}: lettura completa Flash interna.");
-            var readProgress = new Progress<int>(p =>
-                progress.Report(($"Backup {role}: lettura Flash...", p)));
-
             byte[] data = dfu.ReadMemory(
                 FlashStart,
                 FlashSize,
-                readProgress,
-                ct);
+                null,
+                ct,
+                bytes => progress.Report(($"Backup {role}: letti {bytes:N0} / {FlashSize:N0} byte · {elapsed.Elapsed.TotalSeconds:F1} s", (int)((long)bytes * 95 / FlashSize))));
 
-            BackupResult result = SaveSnapshot(role, destinationFolder, data);
+            ct.ThrowIfCancellationRequested();
+            progress.Report(($"Backup {role}: lettura completata. Salvataggio e verifica SHA-256...", 95));
+            BackupResult result = SaveSnapshot(role, destinationFolder, data, dfu.DevicePath) with { Elapsed = elapsed.Elapsed };
             log($"Backup {role}: SHA-256 {result.Sha256}.");
             progress.Report(($"Backup {role} completato.", 100));
             return result;
@@ -70,7 +84,7 @@ internal sealed class BackupRestoreService
     }
 
     // Saves the bytes already read from the device. This does not prove physical MCU identity.
-    internal static BackupResult SaveSnapshot(string role, string destinationFolder, byte[] data)
+    internal static BackupResult SaveSnapshot(string role, string destinationFolder, byte[] data, string? devicePath = null)
     {
         role = NormalizeRole(role);
         if (data.Length != FlashSize)
@@ -93,7 +107,8 @@ internal sealed class BackupRestoreService
         var metadata = new BackupMetadata
         {
             Role = role, UpdaterVersion = AppConstants.UpdaterVersion, CreatedUtc = created,
-            FlashStart = FlashStart, FlashSize = data.Length, Sha256 = hash, FileName = name
+            FlashStart = FlashStart, FlashSize = data.Length, Sha256 = hash, FileName = name,
+            DevicePath = devicePath
         };
         string metadataPath = Path.ChangeExtension(binPath, ".json");
         using (var file = new FileStream(metadataPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
@@ -101,7 +116,7 @@ internal sealed class BackupRestoreService
             JsonSerializer.Serialize(file, metadata, new JsonSerializerOptions { WriteIndented = true });
             file.Flush(flushToDisk: true);
         }
-        return new BackupResult(role, binPath, metadataPath, hash, data.Length);
+        return new BackupResult(role, binPath, metadataPath, hash, data.Length) { DevicePath = devicePath };
     }
 
     // Import owns a verified copy; removable source media is never a catalog dependency.
@@ -159,7 +174,7 @@ internal sealed class BackupRestoreService
             CaptureSafetyBackup(dfu, role, safetyBackupFolder, log, ct, backupCreated);
             ct.ThrowIfCancellationRequested();
             log($"Ripristino {role}: SHA-256 {hash}.");
-            var restoreProgress = new Progress<int>(p =>
+            var restoreProgress = new InlineProgress<int>(p =>
                 progress.Report(($"Ripristino {role}: programmazione e verifica...", p)));
 
             dfu.ProgramRawAndVerify(
@@ -203,7 +218,7 @@ internal sealed class BackupRestoreService
         log($"Backup preventivo {role}: lettura prima di ogni cancellazione Flash.");
         byte[] data = device.ReadMemory(FlashStart, FlashSize, null, ct);
         ct.ThrowIfCancellationRequested();
-        BackupResult backup = SaveSnapshot(role, folder, data);
+        BackupResult backup = SaveSnapshot(role, folder, data, device.DevicePath);
         backupCreated?.Invoke(backup);
         log($"Backup preventivo verificato: {backup.BinPath}; SHA-256 {backup.Sha256}.");
         return backup;

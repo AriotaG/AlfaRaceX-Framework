@@ -94,6 +94,40 @@ internal static class DfuWorkflowTests
                 .RestoreAsync("BH", backup.BinPath, progress, _ => { }, default).GetAwaiter().GetResult());
             Check(session.Events.SequenceEqual(new[] { "dispose" }));
         });
+        test("backup reports actual read counts before verified completion and preserves device evidence", () => {
+            var session = new Session();
+            var reports = new List<(string Message, int Progress)>();
+            var result = new BackupRestoreService(() => session).BackupAsync("BH", Path.Combine(root, "backup-progress"),
+                new InlineProgress<(string Message, int Progress)>(reports.Add), _ => { }, default).GetAwaiter().GetResult();
+            Check(reports.Select(x => x.Progress).SequenceEqual(new[] { 0, 47, 95, 95, 100 }));
+            Check(reports[1].Message.Contains($"{BackupRestoreService.FlashSize / 2:N0}") &&
+                reports[2].Message.Contains($"{BackupRestoreService.FlashSize:N0}"));
+            var metadata = System.Text.Json.JsonSerializer.Deserialize<BackupMetadata>(File.ReadAllText(result.MetadataPath))!;
+            Check(metadata.DevicePath == session.DevicePath && result.DevicePath == session.DevicePath);
+            Check(metadata.RoleEvidence.Contains("not verified") && result.Elapsed >= TimeSpan.Zero);
+            Check(File.ReadAllBytes(result.BinPath).SequenceEqual(session.Original));
+        });
+        test("backup cancellation after read never reports success or writes a snapshot", () => {
+            var session = new Session(); using var cancellation = new CancellationTokenSource();
+            string folder = Path.Combine(root, "backup-cancel-after-read");
+            var reports = new List<int>();
+            var cancelProgress = new InlineProgress<(string Message, int Progress)>(p => {
+                reports.Add(p.Progress); if (p.Progress == 95) cancellation.Cancel();
+            });
+            Reject<OperationCanceledException>(() => new BackupRestoreService(() => session)
+                .BackupAsync("BH", folder, cancelProgress, _ => { }, cancellation.Token).GetAwaiter().GetResult());
+            Check(!reports.Contains(100) && Directory.GetFiles(folder).Length == 0);
+            Check(session.Events.SequenceEqual(new[] { "read", "dispose" }));
+        });
+        test("flash worker progress precedes verified completion", () => {
+            var session = new Session();
+            var reports = new List<(string Message, int Progress)>();
+            new UpdateCoordinator(() => session).FlashAsync(firmware,
+                new InlineProgress<(string Message, int Progress)>(reports.Add), _ => { }, default,
+                Path.Combine(root, "ordered-flash"), confirmTarget: (_, _) => true).GetAwaiter().GetResult();
+            Check(reports.Select(x => x.Progress).SequenceEqual(new[] { 0, 25, 100, 100 }));
+            Check(reports.Last().Message.EndsWith("completato."));
+        });
     }
 
     private sealed class Session : IDfuDevice
@@ -102,14 +136,19 @@ internal static class DfuWorkflowTests
         public readonly List<string> Events = [];
         public readonly byte[] Original = Enumerable.Repeat((byte)0xA5, BackupRestoreService.FlashSize).ToArray();
         public bool ReadError { get; init; }
-        public byte[] ReadMemory(uint address, int length, IProgress<int>? progress, CancellationToken ct)
+        public byte[] ReadMemory(uint address, int length, IProgress<int>? progress, CancellationToken ct, Action<int>? bytesRead = null)
         {
             Events.Add("read");
             if (ReadError) throw new IOException("test read failure");
             ct.ThrowIfCancellationRequested();
+            bytesRead?.Invoke(length / 2);
+            bytesRead?.Invoke(length);
             return Original.ToArray();
         }
-        public void ProgramAndVerify(IntelHexImage image, uint pageSize, IProgress<int>? progress, Action<string>? log, CancellationToken ct) => Events.Add("flash");
+        public void ProgramAndVerify(IntelHexImage image, uint pageSize, IProgress<int>? progress, Action<string>? log, CancellationToken ct)
+        {
+            Events.Add("flash"); progress?.Report(25); progress?.Report(100);
+        }
         public void ProgramRawAndVerify(uint address, byte[] data, uint pageSize, IProgress<int>? progress, Action<string>? log, CancellationToken ct) => Events.Add("restore");
         public void Leave(uint address) => Events.Add("leave");
         public void Dispose() => Events.Add("dispose");

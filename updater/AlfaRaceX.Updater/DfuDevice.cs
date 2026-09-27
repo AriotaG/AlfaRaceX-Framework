@@ -6,7 +6,7 @@ namespace AlfaRaceX.Updater;
 internal interface IDfuDevice : IDisposable
 {
     string DevicePath { get; }
-    byte[] ReadMemory(uint address, int length, IProgress<int>? progress, CancellationToken ct);
+    byte[] ReadMemory(uint address, int length, IProgress<int>? progress, CancellationToken ct, Action<int>? bytesRead = null);
     void ProgramAndVerify(IntelHexImage image, uint pageSize, IProgress<int>? progress, Action<string>? log, CancellationToken ct);
     void ProgramRawAndVerify(uint address, byte[] data, uint pageSize, IProgress<int>? progress, Action<string>? log, CancellationToken ct);
     void Leave(uint applicationAddress);
@@ -140,7 +140,8 @@ internal sealed class DfuDevice : IDfuDevice
         uint address,
         int length,
         IProgress<int>? progress,
-        CancellationToken ct)
+        CancellationToken ct,
+        Action<int>? bytesRead = null)
     {
         if (length <= 0)
             throw new ArgumentOutOfRangeException(nameof(length));
@@ -170,6 +171,7 @@ internal sealed class DfuDevice : IDfuDevice
             Buffer.BlockCopy(chunk, 0, result, offset, count);
             offset += count;
             block++;
+            bytesRead?.Invoke(offset);
 
             progress?.Report(
                 (int)Math.Clamp((long)offset * 100L / length, 0, 100));

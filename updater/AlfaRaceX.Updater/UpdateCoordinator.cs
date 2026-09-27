@@ -24,7 +24,7 @@ internal sealed class UpdateCoordinator
         foreach (FirmwareTarget target in manifest.Targets)
         {
             progress.Report(($"Download {target.Label}...", 0));
-            var downloadProgress = new Progress<int>(p =>
+            var downloadProgress = new InlineProgress<int>(p =>
                 progress.Report(($"Download {target.Label}...", p)));
 
             string path = await _client.DownloadVerifiedAsync(
@@ -64,7 +64,7 @@ internal sealed class UpdateCoordinator
             log($"Rilevato dispositivo DFU per {firmware.Target.Label}.");
             log($"HEX: 0x{firmware.Image.MinAddress:X8} - 0x{firmware.Image.MaxAddress:X8}.");
 
-            var flashProgress = new Progress<int>(p =>
+            var flashProgress = new InlineProgress<int>(p =>
                 progress.Report(($"Programmazione {firmware.Target.Label}...", p)));
 
             dfu.ProgramAndVerify(
