@@ -231,6 +231,7 @@ static bool elm_arm_remote(
 
 static bool elm_start_candidate(ArxRuntime *rt,uint32_t now_ms) {
     if(!rt||rt->elm_candidate_index>=rt->elm_candidate_count)return false;
+    rt->elm_flow_control_pending=false;
     const ArxElmBus candidate=rt->elm_candidates[rt->elm_candidate_index];
 
     /* Reserve the configuration, arm and request slots together. Runtime ingress
@@ -256,6 +257,7 @@ static bool elm_start_candidate(ArxRuntime *rt,uint32_t now_ms) {
 
 static void elm_finish_request(ArxRuntime *rt,bool success) {
     if(!rt)return;
+    rt->elm_flow_control_pending=false;
     elm_disarm_remote(rt);
     if(success&&rt->elm_candidate_index<rt->elm_candidate_count)
         arx_elm_router_remember(
@@ -268,6 +270,7 @@ static void elm_finish_request(ArxRuntime *rt,bool success) {
 
 static bool elm_try_next_candidate(ArxRuntime *rt,uint32_t now_ms) {
     if(!rt)return false;
+    rt->elm_flow_control_pending=false;
     elm_disarm_remote(rt);
     while(++rt->elm_candidate_index<rt->elm_candidate_count){
         if(elm_start_candidate(rt,now_ms))return true;
@@ -306,7 +309,7 @@ static void elm_handle_response(
             &rt->elm_transaction,&rt->elm,now_ms,&fc
         )){
             const ArxElmBus target=rt->elm_candidates[rt->elm_candidate_index];
-            (void)elm_send_frame(rt,&fc,target,now_ms);
+            rt->elm_flow_control_pending=!elm_send_frame(rt,&fc,target,now_ms);
         }
         return;
     }
@@ -338,6 +341,15 @@ static void elm_tick(ArxRuntime *rt,uint32_t now_ms) {
     const bool room=target==ARX_ELM_BUS_C1
         ?rt->can_tx.queues[ARX_PRIORITY_HIGH].count<ARX_CAN_QUEUE_CAPACITY
         :rt->interchip.tx.count<ARX_INTERCHIP_QUEUE_SIZE;
+    if(rt->elm_flow_control_pending){
+        /* The active request freezes ELM configuration, so rebuild the same FC
+           only when space is available; do not extend the response deadline. */
+        ArxCanFrame fc;
+        if(room&&arx_elm_transaction_build_flow_control(
+            &rt->elm_transaction,&rt->elm,now_ms,&fc))
+            rt->elm_flow_control_pending=!elm_send_frame(rt,&fc,target,now_ms);
+        return;
+    }
     ArxCanFrame next;
     if(room&&arx_elm_transaction_next_tx(&rt->elm_transaction,now_ms,&next)){
         (void)elm_send_frame(rt,&next,target,now_ms);

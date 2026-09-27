@@ -117,6 +117,7 @@ typedef struct {
     bool elm_request_active;
     bool elm_saw_response;
     bool elm_output_overflow;
+    bool elm_flow_control_pending;
     uint32_t elm_deadline_ms;
     char elm_line[96];
     uint8_t elm_line_len;

@@ -57,6 +57,62 @@ int main(void){
     CHECK(!rt.elm_output_overflow);
     CHECK(rt.elm_usb_tx_len==strlen("\rBUFFER FULL\r>"));
     CHECK(memcmp(rt.elm_usb_tx,"\rBUFFER FULL\r>",rt.elm_usb_tx_len)==0);
-    puts("ELM full TX queue retains ISO-TP offset; active transaction rejects config mutation: PASS");
+    /* A full CAN queue must retain the receiver's flow-control response too. */
+    arx_runtime_init(&rt,ARX_RUNTIME_C1,&ops);
+    arx_runtime_apply_config(&rt,&cfg,10);
+    rt.elm.tx_header=0x7E0u;
+    const uint8_t short_request[]="220102\r";
+    arx_runtime_usb_rx(&rt,short_request,sizeof(short_request)-1,100);
+    CHECK(arx_runtime_drain_can(&rt,100,1)==1);
+    for(unsigned i=0;i<ARX_CAN_QUEUE_CAPACITY;i++)
+        CHECK(arx_can_enqueue(&rt.can_tx,&filler,ARX_PRIORITY_HIGH,0,500)==ARX_STATUS_OK);
+    ArxCanFrame first_response={.bus=ARX_BUS_C1,.id=0x7E8,.dlc=8,.data={0x10,10,0x62,1,2,3,4,5}};
+    arx_runtime_on_can(&rt,&first_response,101);
+    arx_runtime_tick(&rt,102);
+    CHECK(arx_runtime_drain_can(&rt,102,ARX_CAN_QUEUE_CAPACITY)==ARX_CAN_QUEUE_CAPACITY);
+    arx_runtime_tick(&rt,103);
+    CHECK(arx_runtime_drain_can(&rt,103,1)==1);
+    CHECK(last.id==0x7E0 && last.data[0]==0x30);
+    arx_runtime_tick(&rt,104);
+    CHECK(arx_runtime_drain_can(&rt,104,1)==0); /* No duplicate flow control. */
+    for(unsigned bus=ARX_ELM_BUS_C2;bus<=ARX_ELM_BUS_BH;bus++){
+        arx_runtime_init(&rt,ARX_RUNTIME_C1,&ops);
+        arx_runtime_apply_config(&rt,&cfg,10);
+        rt.elm.tx_header=0x7E0u;
+        arx_elm_router_remember(&rt.elm_router,&rt.elm,(ArxElmBus)bus);
+        arx_runtime_usb_rx(&rt,short_request,sizeof(short_request)-1,100);
+        CHECK(rt.elm_request_active && rt.elm_candidate_count==1);
+        ArxInterchipFrame queued={0};
+        while(rt.interchip.tx.count<ARX_INTERCHIP_QUEUE_SIZE)
+            CHECK(arx_interchip_queue_push(&rt.interchip.tx,&queued));
+        ArxLinkFrame reply;
+        arx_link_build_can(&reply,ARX_LINK_TO_MASTER,ARX_LINK_RSP,false,
+            first_response.id,first_response.data,first_response.dlc,1);
+        arx_runtime_on_interchip(&rt,reply.raw,101);
+        CHECK(rt.elm_flow_control_pending);
+        arx_runtime_tick(&rt,102);
+        CHECK(rt.elm_flow_control_pending);
+        while(rt.interchip.tx.count)arx_interchip_queue_commit(&rt.interchip.tx);
+        arx_runtime_tick(&rt,103);
+        CHECK(!rt.elm_flow_control_pending && rt.interchip.tx.count==1);
+        const ArxInterchipFrame *head=NULL;
+        CHECK(arx_interchip_queue_peek(&rt.interchip.tx,&head));
+        memcpy(reply.raw,head->bytes,sizeof(reply.raw));
+        CHECK(arx_link_validate(&reply) && reply.raw[1]==ARX_LINK_REQ);
+        CHECK(reply.raw[0]==(bus==ARX_ELM_BUS_C2?ARX_LINK_TO_C2:ARX_LINK_TO_BH));
+        CHECK(arx_link_can_id(&reply)==0x7E0 && arx_link_data(&reply)[0]==0x30);
+        while(rt.interchip.tx.count<ARX_INTERCHIP_QUEUE_SIZE)
+            CHECK(arx_interchip_queue_push(&rt.interchip.tx,&queued));
+        arx_link_build_can(&reply,ARX_LINK_TO_MASTER,ARX_LINK_RSP,false,
+            first_response.id,first_response.data,first_response.dlc,2);
+        arx_runtime_on_interchip(&rt,reply.raw,104);
+        CHECK(rt.elm_flow_control_pending);
+        arx_runtime_tick(&rt,rt.elm_deadline_ms);
+        CHECK(!rt.elm_request_active && !rt.elm_flow_control_pending);
+        while(rt.interchip.tx.count)arx_interchip_queue_commit(&rt.interchip.tx);
+        arx_runtime_tick(&rt,400);
+        CHECK(rt.interchip.tx.count==0); /* Expired FC cannot leak into another request. */
+    }
+    puts("ELM full queues retain ISO-TP data and flow control; active transaction rejects config mutation: PASS");
     return 0;
 }
