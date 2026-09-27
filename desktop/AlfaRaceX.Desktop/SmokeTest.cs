@@ -94,6 +94,47 @@ internal static class SmokeTest
             var repository = new HistoryRepository(DesktopPaths.Database);
             if (string.IsNullOrEmpty(repository.GetSetting("DisclaimerAcceptedUtc")))
                 throw new InvalidOperationException("Accettazione disclaimer non persistita.");
+            // Explicit test-only device transport: exercises UI -> service -> protocol -> reply.
+            // The real firmware half of this contract is covered by test_pedal_host.
+            var pedalFixture = new PedalFixture();
+            var originalFactory = window.PedalTransportFactory;
+            try
+            {
+                window.PedalTransportFactory = _ => pedalFixture;
+                await window.Browser.ExecuteScriptAsync("document.getElementById('pedalPort').add(new Option('TEST ONLY','TEST-ONLY')); document.getElementById('pedalPort').value='TEST-ONLY'; document.getElementById('pedalPort').dispatchEvent(new Event('change')); document.getElementById('pedalReadBtn').click();");
+                deadline = DateTime.UtcNow.AddSeconds(5);
+                while (await window.Browser.ExecuteScriptAsync("!document.getElementById('pedalApplyBtn').disabled") != "true")
+                {
+                    if (DateTime.UtcNow > deadline) throw new TimeoutException("Lettura fixture PedalRaceX non completata.");
+                    await Task.Delay(100);
+                }
+                await AssertJs("document.getElementById('pedalMode').options.length===9 && document.getElementById('pedalApplied').textContent==='Non confermata'", "modalità PedalRaceX e nessuna conferma inventata");
+                await window.Browser.ExecuteScriptAsync("document.getElementById('pedalMode').value='5'; document.getElementById('pedalPower').value='2'; window.__savedConfirm=window.confirm; window.confirm=()=>true; document.getElementById('pedalApplyBtn').click(); window.confirm=window.__savedConfirm; delete window.__savedConfirm;");
+                deadline = DateTime.UtcNow.AddSeconds(5);
+                while (await window.Browser.ExecuteScriptAsync("document.getElementById('pedalComm').textContent==='In attesa' && !document.getElementById('pedalReadBtn').disabled") != "true")
+                {
+                    if (DateTime.UtcNow > deadline) throw new TimeoutException("Applicazione PedalRaceX non riporta attesa hardware.");
+                    await Task.Delay(100);
+                }
+                if (pedalFixture.LastWrite != "AT@PRX=05,0C") throw new InvalidOperationException("UI PedalRaceX ha alterato modo/potenza.");
+                await window.Browser.ExecuteScriptAsync("document.getElementById('pedalReadBtn').click()");
+                deadline = DateTime.UtcNow.AddSeconds(5);
+                while (await window.Browser.ExecuteScriptAsync("document.getElementById('pedalComm').textContent==='Mappa confermata' && !document.getElementById('pedalReadBtn').disabled") != "true")
+                {
+                    if (DateTime.UtcNow > deadline) throw new TimeoutException("Risposta PedalRaceX non raggiunge la UI.");
+                    await Task.Delay(100);
+                }
+                pedalFixture.Fail = true;
+                await window.Browser.ExecuteScriptAsync("document.getElementById('pedalReadBtn').click()");
+                deadline = DateTime.UtcNow.AddSeconds(5);
+                while (await window.Browser.ExecuteScriptAsync("document.getElementById('pedalComm').textContent==='Non verificata' && !document.getElementById('pedalReadBtn').disabled") != "true")
+                {
+                    if (DateTime.UtcNow > deadline) throw new TimeoutException("Errore PedalRaceX non invalida stato e controlli.");
+                    await Task.Delay(100);
+                }
+                await AssertJs("document.getElementById('pedalApplyBtn').disabled", "scrittura PedalRaceX bloccata dopo disconnessione");
+            }
+            finally { window.PedalTransportFactory = originalFactory; }
             // Real UI -> backend -> release download -> HEX/hash validation. Never flash a device.
             await window.Browser.ExecuteScriptAsync("document.getElementById('prepareBtn').click()");
             deadline = DateTime.UtcNow.AddSeconds(60);
@@ -102,7 +143,7 @@ internal static class SmokeTest
                 if (DateTime.UtcNow > deadline) throw new TimeoutException("Preparazione firmware reale o riattivazione dei controlli non completata.");
                 await Task.Delay(250);
             }
-            foreach (string page in new[] { "dashboard", "update", "backup", "restore", "logs", "info" })
+            foreach (string page in new[] { "dashboard", "update", "backup", "restore", "logs", "pedal", "info" })
             {
                 await window.Browser.ExecuteScriptAsync($"document.querySelector('.nav-item[data-page={page}]').click()");
                 await AssertJs($"document.getElementById('page-{page}').classList.contains('active')", "navigazione " + page);
@@ -191,5 +232,21 @@ internal static class SmokeTest
             File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), ex.ToString());
             return 2;
         }
+    }
+
+    private sealed class PedalFixture : IPedalRaceXTransport
+    {
+        internal string? LastWrite;
+        internal bool Fail;
+        public string Exchange(string command, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (Fail) throw new IOException("TEST ONLY: dispositivo scollegato.");
+            string fields;
+            if (command.StartsWith("AT@PRX=", StringComparison.Ordinal)) { LastWrite = command; fields = "050C04000109"; }
+            else fields = LastWrite is null ? "000A01000009" : "050C04040209";
+            return "ARXPRX1:C1:" + fields + "00000001000000010000000000000008\r>";
+        }
+        public void Dispose() { }
     }
 }

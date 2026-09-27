@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _operation;
     private UpdateManifest? _manifest;
     private int _manifestGeneration;
+    internal Func<string, IPedalRaceXTransport> PedalTransportFactory { get; set; } = port => new PedalRaceXSerialTransport(port);
 
     public MainWindow()
     {
@@ -170,6 +171,15 @@ public partial class MainWindow : Window
                 break;
             case "getLogs":
                 SendLogs();
+                break;
+            case "pedalPorts":
+                Post("pedalPorts", PedalRaceXSerialTransport.AvailablePorts());
+                break;
+            case "pedalRead":
+                await PedalRaceXAsync(ReadString(payload, "port"), null, null);
+                break;
+            case "pedalApply":
+                await PedalRaceXAsync(ReadString(payload, "port"), checked((int)ReadLong(payload, "mode")), checked((int)ReadLong(payload, "power")));
                 break;
             case "clearLogs":
                 _history.ClearEvents();
@@ -422,6 +432,27 @@ public partial class MainWindow : Window
         Log("INFO", "BACKUP", $"Importato backup {role}: {Path.GetFileName(dialog.FileName)}; copia verificata {imported.BinPath} ({imported.Sha256}).");
         SendBackups();
     }
+
+    private Task PedalRaceXAsync(string port, int? mode, int? power) => RunExclusiveAsync("PEDALRACEX", async ct =>
+    {
+        try
+        {
+            var status = await Task.Run(() =>
+            {
+                using var transport = PedalTransportFactory(port);
+                return mode.HasValue ? PedalRaceXProtocol.Apply(transport, mode.Value, power!.Value, ct)
+                    : PedalRaceXProtocol.Read(transport, ct);
+            }, ct);
+            Post("pedalStatus", new { port, status, observedUtc = DateTime.UtcNow });
+            Log("INFO", "PEDALRACEX", $"C1 {port}: modalità {status.Mode}, potenza {status.Power}, mappa {status.AppliedMap}, stato comunicazione {status.Communication}.");
+            if (mode.HasValue) Log("INFO", "PEDALRACEX", "Configurazione volatile accettata da C1; leggere nuovamente lo stato per la risposta del modulo esterno. La potenza non dispone di readback separato.");
+        }
+        catch
+        {
+            Post("pedalUnavailable", new { port });
+            throw;
+        }
+    });
 
     private async Task RunExclusiveAsync(string category, Func<CancellationToken, Task> work)
     {

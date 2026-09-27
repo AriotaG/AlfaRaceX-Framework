@@ -20,6 +20,7 @@
       <button class="nav-item" data-page="backup"><span>▣</span> Backup</button>
       <button class="nav-item" data-page="restore"><span>↺</span> Ripristino</button>
       <button class="nav-item" data-page="logs"><span>≡</span> Log</button>
+      <button class="nav-item" data-page="pedal"><span>↗</span> PedalRaceX</button>
       <button class="nav-item" data-page="info"><span>ⓘ</span> Informazioni</button>
     </nav>
     <div class="sidebar-footer">
@@ -75,6 +76,31 @@
           <button class="btn-arx ghost mt-3" id="openDataBtn">Apri cartella dati</button>
         </section>
       </div>
+    </section>
+
+    <section class="page" id="page-pedal">
+      <div class="section-intro"><div><span class="section-tag">PEDALRACEX</span><h2>Risposta del pedale</h2><p>Gestione del modulo esterno attraverso AlfaRaceX C1.</p></div></div>
+      <section class="panel">
+        <h3>Collegamento C1</h3>
+        <p class="muted">Attiva la modalità diagnostica USB su C1 e seleziona la sua porta. DFU non supporta questi controlli. Le impostazioni qui applicate durano fino al riavvio; il profilo banco riparte disabilitato.</p>
+        <div class="pedal-controls"><label for="pedalPort">Porta C1</label><select id="pedalPort"><option value="">Seleziona una porta</option></select><button class="btn-arx ghost" id="pedalPortsBtn">Aggiorna porte</button><button class="btn-arx" id="pedalReadBtn" disabled>Leggi stato</button></div>
+        <p class="muted" id="pedalObserved">Nessuna lettura. Stato hardware non verificato.</p>
+      </section>
+      <div class="metric-grid mt-3">
+        <article class="metric"><span>Comunicazione</span><strong id="pedalComm">Non verificata</strong><small id="pedalReplyAge">Nessuna risposta osservata</small></article>
+        <article class="metric"><span>Mappa richiesta</span><strong id="pedalRequested">—</strong><small>Calcolata da C1</small></article>
+        <article class="metric"><span>Mappa restituita</span><strong id="pedalApplied">—</strong><small>Risposta del modulo esterno</small></article>
+        <article class="metric"><span>Vettura</span><strong id="pedalVehicle">—</strong><small id="pedalPermission">Lettura necessaria</small></article>
+      </div>
+      <section class="panel mt-3">
+        <h3>Modalità e potenza</h3>
+        <div class="pedal-controls"><label for="pedalMode">Modalità operativa</label><select id="pedalMode">
+          <option value="0">Disabilitato</option><option value="1">Automatic Map · segue DNA</option><option value="2">Bypass</option><option value="3">All Weather</option><option value="4">Natural</option><option value="5">Dynamic</option><option value="6">Race</option><option value="7">Hybrid Align</option><option value="8">Kids Limiter</option>
+        </select><label for="pedalPower">Potenza −10 / +10</label><input id="pedalPower" type="number" min="-10" max="10" step="1" value="0"><button class="btn-arx" id="pedalApplyBtn" disabled>Applica a C1</button></div>
+        <p class="muted" id="pedalModeHelp">Disabilitato: richiede Bypass prima di interrompere i comandi.</p>
+        <p class="muted">La risposta conferma soltanto la mappa: il protocollo esterno non offre lettura separata della potenza né rilevamento continuo della connessione. Dopo l'applicazione, usa «Leggi stato» per controllare risposta ed eventuali errori.</p>
+        <details><summary>Diagnostica comunicazione</summary><p id="pedalDiagnostics">Nessun dato ricevuto.</p></details>
+      </section>
     </section>
 
     <section class="page" id="page-update">

@@ -203,6 +203,7 @@ try
         } finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(buffer); }
     });
     BackupImportTests.Run(Test, root);
+    PedalRaceXTests.Run(Test);
     DfuWorkflowTests.Run(Test, root, new PreparedFirmware(Manifest().Targets[0], "test-only", Load(upper, payload, eof)));
 }
 finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }

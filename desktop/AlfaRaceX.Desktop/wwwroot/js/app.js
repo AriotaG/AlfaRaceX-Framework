@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const state = { page: 'dashboard', backupRole: 'BH', busy: false, dfuCount: null, appInfo: {}, backups: [], manifest: null, disclaimerAccepted: false };
+  const state = { page: 'dashboard', backupRole: 'BH', busy: false, dfuCount: null, appInfo: {}, backups: [], manifest: null, disclaimerAccepted: false, pedal: null };
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const host = (action, payload = {}) => window.chrome.webview.postMessage({ action, payload });
@@ -30,10 +30,11 @@
     state.page = name;
     document.querySelectorAll('.page').forEach(x => x.classList.toggle('active', x.id === `page-${name}`));
     document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.dataset.page === name));
-    const titles = { dashboard:'Dashboard', update:'Aggiornamento', backup:'Backup', restore:'Ripristino', logs:'Log', info:'Informazioni' };
+    const titles = { dashboard:'Dashboard', update:'Aggiornamento', backup:'Backup', restore:'Ripristino', logs:'Log', info:'Informazioni', pedal:'PedalRaceX' };
     $('pageTitle').textContent = titles[name] || 'AlfaRaceX';
     if (name === 'restore') host('listBackups');
     if (name === 'logs') host('getLogs');
+    if (name === 'pedal' && state.disclaimerAccepted) host('pedalPorts');
   }
 
   function toast(text, title = 'AlfaRaceX') {
@@ -122,9 +123,51 @@
     while (list.children.length > 500) list.lastElementChild.remove();
   }
 
+  const pedalMaps = ['Non confermata', 'Bypass', 'All Weather', 'Natural', 'Dynamic', 'Race'];
+  const pedalComms = ['Non verificata', 'In attesa', 'Mappa confermata', 'Timeout', 'Errore invio', 'Risposta non valida', 'Mappa diversa'];
+  function clearPedal() {
+    state.pedal = null;
+    $('pedalComm').textContent = 'Non verificata';
+    ['pedalRequested','pedalApplied','pedalVehicle'].forEach(id => $(id).textContent = '—');
+    $('pedalObserved').textContent = 'Collegamento non verificato. Seleziona C1 e leggi lo stato.';
+    $('pedalReplyAge').textContent = 'Nessuna risposta osservata';
+    $('pedalDiagnostics').textContent = 'Nessun dato corrente.';
+    $('pedalPermission').textContent = 'Lettura necessaria';
+    updateControls();
+  }
+  function pedalHelp() {
+    const mode = Number($('pedalMode').value);
+    $('pedalModeHelp').textContent = mode === 0 ? 'Disabilitato: richiede Bypass prima di interrompere i comandi.' :
+      mode === 1 ? 'Automatic Map segue il selettore DNA: A, N, D o Race.' :
+      mode === 7 ? 'Hybrid Align usa Natural in A/N/D e Race in Race.' :
+      mode === 8 ? 'Kids Limiter usa All Weather a potenza minima. Richiede acceleratore 0% oltre 100 km/h oppure 3000 rpm diesel / 4000 rpm benzina. Non sostituisce il controllo del conducente.' :
+      'Mappa manuale: non segue i cambi del selettore DNA.';
+  }
+  function renderPedal(d) {
+    if (d.port !== $('pedalPort').value) return;
+    const p = d.status;
+    state.pedal = { ...p, port: d.port };
+    $('pedalComm').textContent = pedalComms[p.communication];
+    $('pedalRequested').textContent = pedalMaps[p.requestedMap];
+    $('pedalApplied').textContent = pedalMaps[p.appliedMap];
+    $('pedalVehicle').textContent = !p.engineKnown ? 'Non disponibile' : p.engineRunning ? 'Motore acceso' : 'Motore spento';
+    $('pedalPermission').textContent = p.canConfigure ? 'Configurazione consentita da C1' : 'Configurazione bloccata: stato assente, scaduto o vettura in movimento';
+    $('pedalObserved').textContent = `C1 · ${d.port} · lettura ${new Date(d.observedUtc).toLocaleString('it-IT')}${p.disablePending ? ' · Bypass ancora da confermare' : ''}`;
+    $('pedalReplyAge').textContent = p.replyAgeMs === 4294967295 ? 'Nessuna risposta osservata' : `Ultimo byte ricevuto ${Math.floor(p.replyAgeMs / 1000)} s prima della lettura`;
+    $('pedalDiagnostics').textContent = `Invii: ${p.transmissions} · Risposte: ${p.replies} · Errori: ${p.errors} · timeout risposta 100 ms · tentativi distanziati oltre 400 ms`;
+    $('pedalMode').value = String(p.mode); $('pedalPower').value = p.power;
+    pedalHelp(); updateControls();
+  }
+
   function updateControls() {
     const allowed = state.disclaimerAccepted && !state.busy;
     const deviceReady = allowed && state.dfuCount === 1;
+    $('pedalReadBtn').disabled = !allowed || !$('pedalPort').value;
+    $('pedalPortsBtn').disabled = !allowed;
+    $('pedalPort').disabled = !allowed;
+    $('pedalMode').disabled = !allowed;
+    $('pedalPower').disabled = !allowed;
+    $('pedalApplyBtn').disabled = !allowed || !state.pedal?.canConfigure || state.pedal.port !== $('pedalPort').value;
     $('prepareBtn').disabled = !allowed;
     $('backupBtn').disabled = !deviceReady;
     $('importBtn').disabled = !allowed;
@@ -171,6 +214,15 @@
       case 'backups': renderBackups(d); break;
       case 'logs': renderLogs(d); break;
       case 'log': appendLog(d); break;
+      case 'pedalPorts': {
+        const selected = $('pedalPort').value;
+        $('pedalPort').replaceChildren(new Option('Seleziona una porta', ''), ...(d || []).map(p => new Option(p, p)));
+        if ((d || []).includes(selected)) $('pedalPort').value = selected;
+        else clearPedal();
+        updateControls(); break;
+      }
+      case 'pedalStatus': renderPedal(d); break;
+      case 'pedalUnavailable': clearPedal(); break;
       case 'busy': setBusy(d.value); break;
       case 'operationProgress':
         renderOperation(d.message || 'Operazione in corso…', d.progress ?? 0);
@@ -209,6 +261,16 @@
   $('disclaimerAcceptBtn').addEventListener('click', () => host('acceptDisclaimer'));
   $('disclaimerExitBtn').addEventListener('click', () => host('exitApplication'));
 
+  $('pedalPortsBtn').addEventListener('click', () => host('pedalPorts'));
+  $('pedalPort').addEventListener('change', clearPedal);
+  $('pedalMode').addEventListener('change', pedalHelp);
+  $('pedalReadBtn').addEventListener('click', () => host('pedalRead', { port: $('pedalPort').value }));
+  $('pedalApplyBtn').addEventListener('click', () => {
+    const mode = Number($('pedalMode').value), power = Number($('pedalPower').value);
+    if (!Number.isInteger(power) || power < -10 || power > 10) { toast('Potenza ammessa: intero da −10 a +10.', 'PedalRaceX'); return; }
+    if (confirm('Applicare questa modalità PedalRaceX alla vettura ferma? La risposta del pedale può cambiare. La conferma della mappa va verificata con una nuova lettura.'))
+      host('pedalApply', { port: $('pedalPort').value, mode, power });
+  });
   updateControls();
   host('initialize');
 })();
