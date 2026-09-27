@@ -64,6 +64,26 @@ internal static class SmokeTest
                 if (DateTime.UtcNow > deadline) throw new TimeoutException("Messaggio dal worker non ricevuto dalla UI.");
                 await Task.Delay(100);
             }
+            // Exercise the real rejection path before acceptance, without invoking hardware.
+            await window.Browser.ExecuteScriptAsync("window.__bridgeRejections=0; window.chrome.webview.addEventListener('message',e=>{if(e.data.type==='log' && e.data.data.category==='BRIDGE')window.__bridgeRejections++;}); document.querySelector('.nav-item[data-page=logs]').click();");
+            deadline = DateTime.UtcNow.AddSeconds(5);
+            while (await window.Browser.ExecuteScriptAsync("window.__bridgeRejections >= 1") != "true")
+            {
+                if (DateTime.UtcNow > deadline) throw new TimeoutException("Rifiuto richiesta prima del disclaimer non ricevuto.");
+                await Task.Delay(100);
+            }
+            await Task.Delay(750);
+            await AssertJs("window.__bridgeRejections === 1 && document.getElementById('logList').textContent.includes('disclaimer')", "nessun ciclo di richieste causato dal log di rifiuto");
+            // Test-only hostile text and burst: verify escaping, newest-first order and bounded DOM.
+            for (int i = 0; i < 505; i++)
+                window.Post("log", new { createdUtc = DateTime.UtcNow, level = "INFO", category = "SMOKE", message = $"<img src=x onerror=alert(1)> fixture {i}" });
+            deadline = DateTime.UtcNow.AddSeconds(5);
+            while (await window.Browser.ExecuteScriptAsync("document.getElementById('logList').firstElementChild?.textContent.includes('fixture 504') === true") != "true")
+            {
+                if (DateTime.UtcNow > deadline) throw new TimeoutException("Flusso log UI non completato.");
+                await Task.Delay(100);
+            }
+            await AssertJs("document.getElementById('logList').children.length === 500 && !document.querySelector('#logList img') && document.getElementById('logList').lastElementChild.textContent.includes('fixture 5')", "log live limitati e testo HTML innocuo");
             await window.Browser.ExecuteScriptAsync("document.getElementById('disclaimerAcceptBtn').click()");
             deadline = DateTime.UtcNow.AddSeconds(5);
             while (await window.Browser.ExecuteScriptAsync("document.getElementById('disclaimerGate').hidden") != "true")

@@ -107,8 +107,19 @@
     updateControls();
   }
 
+  function logRow(x) {
+    return `<div class="log-row ${esc(x.level)}"><span class="ts">${esc(new Date(x.createdUtc).toLocaleString('it-IT'))}</span><span class="lvl">${esc(x.level)}</span><span class="cat">${esc(x.category)}</span><span>${esc(x.message)}</span></div>`;
+  }
+
   function renderLogs(items) {
-    $('logList').innerHTML = (items || []).map(x => `<div class="log-row ${esc(x.level)}"><span class="ts">${esc(new Date(x.createdUtc).toLocaleString('it-IT'))}</span><span class="lvl">${esc(x.level)}</span><span class="cat">${esc(x.category)}</span><span>${esc(x.message)}</span></div>`).join('');
+    $('logList').innerHTML = (items || []).slice(0, 500).map(logRow).join('');
+  }
+
+  function appendLog(item) {
+    // A rejected history request itself emits a log. Never request history from this event.
+    const list = $('logList');
+    list.insertAdjacentHTML('afterbegin', logRow(item));
+    while (list.children.length > 500) list.lastElementChild.remove();
   }
 
   function updateControls() {
@@ -159,7 +170,7 @@
       case 'manifestError': toast(`Manifest firmware non disponibile: ${d.message}`, 'Connessione'); break;
       case 'backups': renderBackups(d); break;
       case 'logs': renderLogs(d); break;
-      case 'log': if (state.page === 'logs') host('getLogs'); break;
+      case 'log': appendLog(d); break;
       case 'busy': setBusy(d.value); break;
       case 'operationProgress':
         renderOperation(d.message || 'Operazione in corso…', d.progress ?? 0);
