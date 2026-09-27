@@ -6,8 +6,9 @@ void arx_park_mirror_init(ArxParkMirror *f) {
     memset(f,0,sizeof(*f));
     f->restore_delay_ms=10000u;
     f->command_period_ms=900u;
-    f->inter_command_pause_ms=1800u;
-    f->neutral_transient_ms=1200u;
+    /* BACCAble globalVariables.h: PAUSE_BETWEEN_PARK_MIRROR_COMMANDS / NEUTRAL_GEAR_TRANSIENT_MS. */
+    f->inter_command_pause_ms=2500u;
+    f->neutral_transient_ms=500u;
 }
 
 
@@ -62,10 +63,13 @@ void arx_park_mirror_update(
     uint32_t now_ms
 ) {
     if (!f || !f->enabled || !f->calibrated_park) return;
+    f->engine_running=rpm>400u;
 
     if (gear==0x0Eu) { /* reverse */
         f->exit_reverse_ms=0u;
         f->neutral_entry_ms=0u;
+        f->exit_reverse_active=false;
+        f->neutral_active=false;
 
         if (turn_indicator==0x02u) {
             if(!f->request_left_park && !f->request_right_park) {
@@ -90,25 +94,27 @@ void arx_park_mirror_update(
     }
 
     if (gear==0x00u) { /* neutral transient */
-        if(!f->neutral_entry_ms) f->neutral_entry_ms=now_ms;
-        if(now_ms-f->neutral_entry_ms < f->neutral_transient_ms) f->exit_reverse_ms=0u;
+        if(!f->neutral_active) { f->neutral_entry_ms=now_ms;f->neutral_active=true; }
+        if(now_ms-f->neutral_entry_ms < f->neutral_transient_ms) {
+            f->exit_reverse_ms=0u;f->exit_reverse_active=false;
+        }
         return;
     }
 
     f->neutral_entry_ms=0u;
+    f->neutral_active=false;
+    bool immediate_restore=false;
 
-    if ((f->request_left_park || f->request_right_park) && f->exit_reverse_ms==0u) {
+    if ((f->request_left_park || f->request_right_park) && !f->exit_reverse_active) {
         f->exit_reverse_ms=now_ms;
+        f->exit_reverse_active=true;
 
         /* P or stopped engine: request immediate restore without unsigned-underflow tricks. */
-        if(gear==0x0Du || rpm<=400u) {
-            f->exit_reverse_ms = (now_ms > f->restore_delay_ms)
-                ? now_ms-f->restore_delay_ms-1u : 1u;
-        }
+        immediate_restore=gear==0x0Du || rpm<=400u;
     }
 
-    if (f->exit_reverse_ms &&
-        now_ms-f->exit_reverse_ms > f->restore_delay_ms) {
+    if (f->exit_reverse_active &&
+        (immediate_restore || now_ms-f->exit_reverse_ms > f->restore_delay_ms)) {
         if(f->request_left_park || f->request_right_park) {
             f->request_restore=true;
             f->restore_request_ms=now_ms;
@@ -116,12 +122,16 @@ void arx_park_mirror_update(
         f->request_left_park=false;
         f->request_right_park=false;
         f->exit_reverse_ms=0u;
+        f->exit_reverse_active=false;
     }
 }
 
 bool arx_park_mirror_build_command(ArxParkMirror *f, uint32_t now_ms, ArxCanFrame *out) {
+    if(f && f->request_restore && now_ms-f->restore_request_ms > 15000u+f->inter_command_pause_ms)
+        f->request_restore=false;
     if(!f || !out || !f->enabled || !f->calibrated_normal) return false;
     if(!(f->request_left_park || f->request_right_park || f->request_restore)) return false;
+    if(!f->request_restore && !f->engine_running) return false;
     if(f->capture_normal || !f->source_steady) return false;
     if(f->last_command_ms && now_ms-f->last_command_ms <= f->command_period_ms) return false;
 

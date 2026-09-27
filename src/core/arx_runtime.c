@@ -1188,6 +1188,9 @@ void arx_runtime_on_can(
             rt->template_1ef=*frame;
             rt->template_1ef_valid=true;
             arx_windows_observe_rf(&rt->windows,frame,now_ms);
+            /* Upstream transforms a live RF frame; never replay it on every main-loop tick. */
+            if(arx_windows_build_action(&rt->windows,frame,now_ms,&out))
+                (void)enqueue_can(rt,&out,ARX_PRIORITY_NORMAL,now_ms);
         }
 
         if(!frame->extended_id&&frame->id==0x226u)
@@ -1726,10 +1729,6 @@ static void periodic_c1(ArxRuntime *rt,uint32_t now_ms) {
 
     arx_seatbelt_tick(&rt->seatbelt,now_ms);
     arx_faults_tick(&rt->faults,now_ms);
-
-    if(rt->template_1ef_valid&&
-       arx_windows_build_action(&rt->windows,&rt->template_1ef,now_ms,&out))
-        (void)enqueue_can(rt,&out,ARX_PRIORITY_NORMAL,now_ms);
 
     if(rt->ops.pedal_send){
         uint8_t packet[ARX_PEDAL_PACKET_SIZE];

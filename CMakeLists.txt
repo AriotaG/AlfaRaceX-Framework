@@ -93,6 +93,7 @@ foreach(test_name
     features
     pedal_controller
     pedal_host
+    comfort_safety
     parity_core
     dyno_faults
     shift_exact

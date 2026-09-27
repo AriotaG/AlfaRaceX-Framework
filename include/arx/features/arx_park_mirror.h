@@ -26,6 +26,9 @@ typedef struct {
     bool request_restore;
     bool capture_normal;
     bool capture_park;
+    bool exit_reverse_active;
+    bool neutral_active;
+    bool engine_running;
 
     uint32_t left_request_ms;
     uint32_t right_request_ms;
