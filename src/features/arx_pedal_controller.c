@@ -173,7 +173,10 @@ void arx_pedal_tick(ArxPedalController *f,bool engine_running,uint32_t now_ms) {
         f->waiting_reply=false;f->communication=ARX_PEDAL_COMM_TIMEOUT;f->error_count++;
         f->applied_map=ARX_PEDAL_MAP_UNKNOWN;
     }
-    if(!engine_running&&f->mode!=ARX_PEDAL_DISABLED)f->applied_map=ARX_PEDAL_MAP_UNKNOWN;
+    if(!engine_running&&f->mode!=ARX_PEDAL_DISABLED){
+        f->applied_map=ARX_PEDAL_MAP_UNKNOWN;
+        if(f->communication==ARX_PEDAL_COMM_MAP_CONFIRMED)f->communication=ARX_PEDAL_COMM_UNKNOWN;
+    }
 }
 
 bool arx_pedal_needs_sync(
@@ -269,7 +272,8 @@ bool arx_pedal_prepare_packet(ArxPedalController *f,ArxDnaMode dna,
     arx_pedal_tick(f,engine_running,now_ms);
     if(f->waiting_reply || (f->attempted&&now_ms-f->last_tx_ms<=f->retry_interval_ms))return false;
     /* Upstream ensures the minimum-power A map first, independently of limiting. */
-    if(arx_pedal_build_sync_packet(f,dna,engine_running,now_ms,out))return true;
+    /* The shared runtime engine flag includes 400 RPM; the upstream pedal gate does not. */
+    if(arx_pedal_build_sync_packet(f,dna,engine_running&&rpm>400u,now_ms,out))return true;
     if(arx_pedal_kids_override_required(f,diesel,rpm,speed)){
         f->requested_map=ARX_PEDAL_MAP_ALL_WEATHER;
         return arx_pedal_build_zero_override(f,out);

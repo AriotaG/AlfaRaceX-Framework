@@ -101,6 +101,13 @@ internal static class SmokeTest
             try
             {
                 window.PedalTransportFactory = _ => pedalFixture;
+                await window.Browser.ExecuteScriptAsync("window.__pedalPortsReceived=false; window.chrome.webview.addEventListener('message',e=>{if(e.data.type==='pedalPorts')window.__pedalPortsReceived=true;}); document.querySelector('.nav-item[data-page=pedal]').click();");
+                deadline = DateTime.UtcNow.AddSeconds(5);
+                while (await window.Browser.ExecuteScriptAsync("window.__pedalPortsReceived") != "true")
+                {
+                    if (DateTime.UtcNow > deadline) throw new TimeoutException("Enumerazione porte PedalRaceX non completata.");
+                    await Task.Delay(100);
+                }
                 await window.Browser.ExecuteScriptAsync("document.getElementById('pedalPort').add(new Option('TEST ONLY','TEST-ONLY')); document.getElementById('pedalPort').value='TEST-ONLY'; document.getElementById('pedalPort').dispatchEvent(new Event('change')); document.getElementById('pedalReadBtn').click();");
                 deadline = DateTime.UtcNow.AddSeconds(5);
                 while (await window.Browser.ExecuteScriptAsync("!document.getElementById('pedalApplyBtn').disabled") != "true")
@@ -124,6 +131,11 @@ internal static class SmokeTest
                     if (DateTime.UtcNow > deadline) throw new TimeoutException("Risposta PedalRaceX non raggiunge la UI.");
                     await Task.Delay(100);
                 }
+                await window.Browser.ExecuteScriptAsync("document.getElementById('pedalMode').scrollIntoView({block:'center'})");
+                await AssertJs("document.documentElement.scrollWidth<=window.innerWidth && ['pedalMode','pedalPower','pedalApplyBtn'].every(id=>{const r=document.getElementById(id).getBoundingClientRect();return r.width>0&&r.left>=0&&r.right<=window.innerWidth&&r.top>=0&&r.bottom<=window.innerHeight;})", "controlli PedalRaceX visibili senza overflow orizzontale");
+                await using (var screenshot = File.Create(Path.Combine(DesktopPaths.Root, "ui-pedal-confirmed-test-only.png")))
+                    await window.Browser.CoreWebView2.CapturePreviewAsync(Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, screenshot);
+                await window.Browser.ExecuteScriptAsync("window.scrollTo(0,0)");
                 pedalFixture.Fail = true;
                 await window.Browser.ExecuteScriptAsync("document.getElementById('pedalReadBtn').click()");
                 deadline = DateTime.UtcNow.AddSeconds(5);
@@ -224,7 +236,7 @@ internal static class SmokeTest
                     throw new InvalidOperationException("Contesto diagnostico diverso dal processo effettivo.");
             }
             await AssertJs("document.styleSheets.length >= 2 && typeof bootstrap === 'object'", "risorse Bootstrap locali");
-            File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), "PASS: WebView2, worker bridge, disclaimer persistito, preparazione reale dei tre firmware, controlli DFU, sei viste, Bootstrap locale, notifica Windows USB/debounce con enumerazione reale (senza hotplug fisico), secondo processo ripristina la prima finestra, log di avvio.");
+            File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), "PASS: WebView2, worker bridge, disclaimer persistito, PedalRaceX lettura/applicazione/attesa/conferma/disconnessione con trasporto TEST ONLY e controlli visibili, preparazione reale dei tre firmware, controlli DFU, sette viste, Bootstrap locale, notifica Windows USB/debounce con enumerazione reale (senza hotplug fisico), secondo processo ripristina la prima finestra, log di avvio.");
             return 0;
         }
         catch (Exception ex)
