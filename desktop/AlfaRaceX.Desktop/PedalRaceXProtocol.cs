@@ -1,10 +1,23 @@
 using System.Globalization;
+using System.Text.Json.Serialization;
 
 namespace AlfaRaceX.Desktop;
 
-internal sealed record PedalRaceXStatus(int Mode, int Power, int RequestedMap, int AppliedMap,
-    int Communication, bool CanConfigure, bool EngineRunning, bool EngineKnown, bool DisablePending,
-    uint Transmissions, uint Replies, uint Errors, uint ReplyAgeMs);
+// Explicit bridge names: Post uses the default serializer, while the WebView consumes camelCase.
+internal sealed record PedalRaceXStatus(
+    [property: JsonPropertyName("mode")] int Mode,
+    [property: JsonPropertyName("power")] int Power,
+    [property: JsonPropertyName("requestedMap")] int RequestedMap,
+    [property: JsonPropertyName("appliedMap")] int AppliedMap,
+    [property: JsonPropertyName("communication")] int Communication,
+    [property: JsonPropertyName("canConfigure")] bool CanConfigure,
+    [property: JsonPropertyName("engineRunning")] bool EngineRunning,
+    [property: JsonPropertyName("engineKnown")] bool EngineKnown,
+    [property: JsonPropertyName("disablePending")] bool DisablePending,
+    [property: JsonPropertyName("transmissions")] uint Transmissions,
+    [property: JsonPropertyName("replies")] uint Replies,
+    [property: JsonPropertyName("errors")] uint Errors,
+    [property: JsonPropertyName("replyAgeMs")] uint ReplyAgeMs);
 
 internal interface IPedalRaceXTransport : IDisposable
 {

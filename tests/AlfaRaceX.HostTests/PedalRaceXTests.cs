@@ -18,6 +18,16 @@ internal static class PedalRaceXTests
     }
     internal static void Run(Action<string, Action> test)
     {
+        test("PedalRaceX bridge preserves the JavaScript status contract", () => {
+            var status = PedalRaceXProtocol.Parse(Record());
+            using var json = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new { status }));
+            var s = json.RootElement.GetProperty("status");
+            string[] names = ["mode", "power", "requestedMap", "appliedMap", "communication", "canConfigure",
+                "engineRunning", "engineKnown", "disablePending", "transmissions", "replies", "errors", "replyAgeMs"];
+            if (!s.EnumerateObject().Select(p => p.Name).Order().SequenceEqual(names.Order()) ||
+                !s.GetProperty("canConfigure").GetBoolean() || s.GetProperty("appliedMap").GetInt32() != 4)
+                throw new Exception("Bridge status cannot be consumed by the WebView2 UI");
+        });
         test("PedalRaceX parses real protocol fields without treating power as readback", () => {
             var s = PedalRaceXProtocol.Parse("AT@PRX?\r" + Record() + "\r>");
             if (s.Mode != 5 || s.Power != 10 || s.AppliedMap != 4 || s.Replies != 1 || !s.EngineKnown || !s.CanConfigure) throw new Exception("Fields changed");
