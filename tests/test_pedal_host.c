@@ -37,6 +37,14 @@ int main(void){
     r.elm_request_active=true;
     command(&r,"AT@PRX=04,0A\r",1012);
     assert(strstr((char*)r.elm_usb_tx,"BUS BUSY") && r.pedal.mode==ARX_PEDAL_DYNAMIC);
+    arx_runtime_init(&r,ARX_RUNTIME_C1,&ops);r.usb_mode.mode=ARX_USB_MODE_DIAGNOSTIC;sent=0;
+    arx_runtime_on_can(&r,&stopped,2000);
+    command(&r,"AT@PRX=08,14\r",2001);
+    arx_runtime_tick(&r,2002);
+    assert(sent==1 && packet[2]==0x49 && packet[3]==90 && !r.engine_running);
+    arx_runtime_on_pedal_reply(&r,0x59,2010);
+    arx_runtime_tick(&r,2403);
+    assert(sent==1); /* Entry command only; engine-off polling never repeats it. */
     arx_runtime_init(&r,ARX_RUNTIME_C2,&ops);r.usb_mode.mode=ARX_USB_MODE_DIAGNOSTIC;
     command(&r,"AT@PRX=05,14\r",1);
     assert(r.elm_usb_tx_len==0);

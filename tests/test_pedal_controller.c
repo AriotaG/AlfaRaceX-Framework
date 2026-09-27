@@ -56,6 +56,20 @@ int main(void) {
     assert(packet[1] == 0xFFu && packet[2] == 0x00u);
 
     arx_pedal_init(&p);
+    assert(arx_pedal_set_mode(&p,ARX_PEDAL_KIDS_LIMITER));
+    assert(arx_pedal_prepare_packet(&p,ARX_DNA_NATURAL,false,true,0,0,0,packet));
+    assert(packet[1]==0xB6 && packet[2]==0x49 && packet[3]==90);
+    arx_pedal_note_send(&p,false,0);
+    assert(!arx_pedal_prepare_packet(&p,ARX_DNA_NATURAL,false,true,0,0,400,packet));
+    assert(arx_pedal_prepare_packet(&p,ARX_DNA_NATURAL,false,true,0,0,401,packet));
+    arx_pedal_note_send(&p,true,401);arx_pedal_on_reply_at(&p,0x59,410);
+    assert(!arx_pedal_prepare_packet(&p,ARX_DNA_NATURAL,false,true,0,0,802,packet));
+    /* Leaving Kids before a send must discard its pending selection. */
+    assert(arx_pedal_set_mode(&p,ARX_PEDAL_NATURAL));
+    assert(arx_pedal_set_mode(&p,ARX_PEDAL_KIDS_LIMITER));
+    assert(arx_pedal_set_mode(&p,ARX_PEDAL_NATURAL));
+    assert(!arx_pedal_prepare_packet(&p,ARX_DNA_NATURAL,false,true,0,0,803,packet));
+    arx_pedal_init(&p);
     assert(!arx_pedal_set_mode(&p,(ArxPedalMode)-1));
     assert(!arx_pedal_set_power(&p,11));
     assert(!arx_pedal_build_map_packet(&p,ARX_PEDAL_MAP_UNKNOWN,packet));

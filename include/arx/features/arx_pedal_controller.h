@@ -47,6 +47,7 @@ typedef struct {
     bool waiting_reply;
     bool disable_pending;
     bool attempted;
+    bool kids_selection_pending; /* One A-min request on entry, even before engine start. */
     uint32_t error_count;
     uint32_t last_reply_ms;
 

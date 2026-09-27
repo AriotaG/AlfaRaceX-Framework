@@ -59,6 +59,7 @@ bool arx_pedal_set_mode(ArxPedalController *f, ArxPedalMode mode) {
     if (!f || (unsigned)mode > ARX_PEDAL_KIDS_LIMITER) return false;
     if(f->mode!=mode){
         f->disable_pending=mode==ARX_PEDAL_DISABLED;
+        f->kids_selection_pending=mode==ARX_PEDAL_KIDS_LIMITER;
         f->waiting_reply=false;
         f->applied_map=ARX_PEDAL_MAP_UNKNOWN;
         f->communication=ARX_PEDAL_COMM_UNKNOWN;
@@ -164,7 +165,10 @@ void arx_pedal_note_send(ArxPedalController *f,bool success,uint32_t now_ms) {
     f->last_tx_ms=now_ms;f->attempted=true;
     f->waiting_reply=success;
     f->communication=success?ARX_PEDAL_COMM_WAITING:ARX_PEDAL_COMM_TX_ERROR;
-    if(success)f->tx_count++;else f->error_count++;
+    if(success){
+        f->tx_count++;
+        f->kids_selection_pending=false;
+    }else f->error_count++;
 }
 
 void arx_pedal_tick(ArxPedalController *f,bool engine_running,uint32_t now_ms) {
@@ -185,7 +189,7 @@ bool arx_pedal_needs_sync(
     bool engine_running,
     uint32_t now_ms
 ) {
-    if (!f || f->waiting_reply || (!engine_running&&!f->disable_pending) ||
+    if (!f || f->waiting_reply || (!engine_running&&!f->disable_pending&&!f->kids_selection_pending) ||
         (f->mode == ARX_PEDAL_DISABLED&&!f->disable_pending)) return false;
 
     const ArxPedalMap target = arx_pedal_target_map(f, dna_mode);
