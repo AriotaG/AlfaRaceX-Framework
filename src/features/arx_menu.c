@@ -77,7 +77,7 @@ bool arx_menu_main_text(uint8_t page,char out[ARX_MENU_TEXT_LEN+1u]){
 
 static char mark(bool on){return on?'X':'O';}
 static const char *pedal_name(uint8_t m){
-    static const char *n[]={"Disabled","Auto","Bypass","All Weather","Natural","Dynamic","Race","Hybrid","Kids Limit"};
+    static const char *n[]={"Off","Auto","Bypass","Weather","Natural","Dynamic","Race","Hybrid","Kids"};
     return m<9u?n[m]:"Disabled";
 }
 static const char *tri_name(uint8_t v){static const char *n[]={"OFF","1 Click","2 Click"};return v<3u?n[v]:"OFF";}
@@ -144,9 +144,9 @@ bool arx_menu_setup_text(uint8_t p,const ArxRuntimeConfig *c,char out[ARX_MENU_T
         case 17:marked_text(out,false,"Remote Start");break;
         case 18:marked_text(out,c->diesel_profile,"Diesel   Params");break;
         case 19:marked_text(out,c->odometer_blink_mask_enabled,"Odometer Blink");break;
-        case 20:prefix_choice(out,"Pedal ",pedal_name(c->pedal_mode));break;
+        case 20:prefix_choice(out,"PedalRaceX ",pedal_name(c->pedal_mode));break;
         case 21:{
-            put18(out,"Pedal Power:");
+            put18(out,"PedalRaceX P:");
             int v=c->pedal_power;
             unsigned mag=(unsigned)(v<0?-v:v);
             out[13]=' ';

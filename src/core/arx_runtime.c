@@ -356,6 +356,50 @@ static void elm_tick(ArxRuntime *rt,uint32_t now_ms) {
     }
 }
 
+/* AlfaRaceX host management extension. External pedal UART packets are unchanged. */
+static int pedal_hex(char c){
+    if(c>='0'&&c<='9')return c-'0';
+    if(c>='A'&&c<='F')return c-'A'+10;
+    return -1;
+}
+
+static bool pedal_host_command(ArxRuntime *rt,const char *line,uint32_t now_ms){
+    if(strncmp(line,"AT@PRX",6)!=0)return false;
+    const bool stationary=(rt->vehicle.valid_mask&ARX_VS_SPEED)&&now_ms-rt->pedal_speed_sample_ms<=1000u&&rt->vehicle.vehicle_speed_kmh==0.0f;
+    const bool engine_off=(rt->vehicle.valid_mask&ARX_VS_ENGINE_RPM)&&now_ms-rt->pedal_rpm_sample_ms<=1000u&&rt->vehicle.engine_rpm<400u;
+    if(strcmp(line,"AT@PRX?")!=0){
+        if(strlen(line)!=12u||line[6]!='='||line[9]!=','||
+           pedal_hex(line[7])<0||pedal_hex(line[8])<0||pedal_hex(line[10])<0||pedal_hex(line[11])<0){
+            (void)elm_usb_text(rt,"ARXPRX1:ERR:FORMAT");elm_usb_prompt(rt);return true;
+        }
+        const int mode=pedal_hex(line[7])*16+pedal_hex(line[8]);
+        const int power=pedal_hex(line[10])*16+pedal_hex(line[11])-10;
+        if(mode>ARX_PEDAL_KIDS_LIMITER||power<-10||power>10){
+            (void)elm_usb_text(rt,"ARXPRX1:ERR:RANGE");elm_usb_prompt(rt);return true;
+        }
+        if(!stationary&&!engine_off){
+            (void)elm_usb_text(rt,"ARXPRX1:ERR:VEHICLE_STATE");elm_usb_prompt(rt);return true;
+        }
+        rt->config.pedal_mode=(uint8_t)mode;rt->config.pedal_power=(int8_t)power;
+        (void)arx_pedal_set_mode(&rt->pedal,(ArxPedalMode)mode);
+        (void)arx_pedal_set_power(&rt->pedal,(int8_t)power);
+    }
+    (void)elm_usb_text(rt,"ARXPRX1:C1:");
+    elm_usb_hex_byte(rt,(uint8_t)rt->pedal.mode);
+    elm_usb_hex_byte(rt,(uint8_t)(rt->pedal.power+10));
+    elm_usb_hex_byte(rt,(uint8_t)arx_pedal_target_map(&rt->pedal,rt->vehicle.dna_mode));
+    elm_usb_hex_byte(rt,(uint8_t)rt->pedal.applied_map);
+    elm_usb_hex_byte(rt,(uint8_t)rt->pedal.communication);
+    elm_usb_hex_byte(rt,(uint8_t)((stationary||engine_off?1u:0u)|(rt->engine_running?2u:0u)|(rt->pedal.disable_pending?4u:0u)|
+        ((rt->vehicle.valid_mask&ARX_VS_ENGINE_RPM)&&now_ms-rt->pedal_rpm_sample_ms<=1000u?8u:0u)));
+    elm_usb_hex_id(rt,rt->pedal.tx_count,true);
+    elm_usb_hex_id(rt,rt->pedal.reply_count,true);
+    elm_usb_hex_id(rt,rt->pedal.error_count,true);
+    elm_usb_hex_id(rt,rt->pedal.reply_count?now_ms-rt->pedal.last_reply_ms:UINT32_MAX,true);
+    elm_usb_prompt(rt);
+    return true;
+}
+
 static void elm_process_line(ArxRuntime *rt,uint32_t now_ms) {
     if(!rt||rt->elm_line_len==0u)return;
     elm_usb_compact(rt);
@@ -384,6 +428,10 @@ static void elm_process_line(ArxRuntime *rt,uint32_t now_ms) {
         return;
     }
 
+    if(pedal_host_command(rt,p,now_ms)){
+        rt->elm_line_len=0u;
+        return;
+    }
     if(at){
         char reply[192];
         const size_t n=arx_elm327_command(&rt->elm,p,reply,sizeof(reply));
@@ -1062,6 +1110,12 @@ static void handle_common_state_updates(
     uint32_t now_ms
 ) {
     arx_decode_frame(frame,&rt->vehicle);
+#if ARX_COMPILE_C1
+    if(rt->role==ARX_RUNTIME_C1&&frame->bus==ARX_BUS_C1&&!frame->extended_id){
+        if(frame->id==0x101u&&frame->dlc>=3u)rt->pedal_speed_sample_ms=now_ms;
+        if(frame->id==0x0FCu&&frame->dlc>=4u)rt->pedal_rpm_sample_ms=now_ms;
+    }
+#endif
     update_engine_state(rt,now_ms);
 
     if(frame->id==0x0FCu&&!frame->extended_id){
@@ -1295,11 +1349,11 @@ void arx_runtime_on_can(
 
 }
 
-void arx_runtime_on_pedal_reply(ArxRuntime *rt,uint8_t reply_byte) {
+void arx_runtime_on_pedal_reply(ArxRuntime *rt,uint8_t reply_byte,uint32_t now_ms) {
 #if ARX_COMPILE_C1
-    if(rt&&rt->role==ARX_RUNTIME_C1)arx_pedal_on_reply(&rt->pedal,reply_byte);
+    if(rt&&rt->role==ARX_RUNTIME_C1)arx_pedal_on_reply_at(&rt->pedal,reply_byte,now_ms);
 #else
-    (void)rt;(void)reply_byte;
+    (void)rt;(void)reply_byte;(void)now_ms;
 #endif
 }
 
@@ -1679,16 +1733,12 @@ static void periodic_c1(ArxRuntime *rt,uint32_t now_ms) {
 
     if(rt->ops.pedal_send){
         uint8_t packet[ARX_PEDAL_PACKET_SIZE];
-        if(arx_pedal_kids_override_required(
-            &rt->pedal,rt->config.diesel_profile,rt->vehicle.engine_rpm,
-            rt->vehicle.vehicle_speed_kmh)){
-            if(arx_pedal_build_zero_override(&rt->pedal,packet)&&
-               rt->ops.pedal_send(packet,rt->ops.user))
-                rt->pedal_packets++;
-        }else if(arx_pedal_build_sync_packet(
-            &rt->pedal,rt->vehicle.dna_mode,rt->engine_running,now_ms,packet)){
-            if(rt->ops.pedal_send(packet,rt->ops.user))
-                rt->pedal_packets++;
+        if(arx_pedal_prepare_packet(&rt->pedal,rt->vehicle.dna_mode,
+            rt->engine_running,rt->config.diesel_profile,rt->vehicle.engine_rpm,
+            rt->vehicle.vehicle_speed_kmh,now_ms,packet)){
+            const bool sent=rt->ops.pedal_send(packet,rt->ops.user);
+            arx_pedal_note_send(&rt->pedal,sent,now_ms);
+            if(sent)rt->pedal_packets++;
         }
     }
 

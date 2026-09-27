@@ -39,7 +39,7 @@ static void drain_ingress(void) {
         switch(event.kind) {
             case ARX_INGRESS_CAN: arx_runtime_on_can(&runtime_ctx,&event.data.can,event.timestamp_ms);break;
             case ARX_INGRESS_INTERCHIP: arx_runtime_on_interchip(&runtime_ctx,event.data.bytes,event.timestamp_ms);break;
-            case ARX_INGRESS_PEDAL: arx_runtime_on_pedal_reply(&runtime_ctx,event.data.bytes[0]);break;
+            case ARX_INGRESS_PEDAL: arx_runtime_on_pedal_reply(&runtime_ctx,event.data.bytes[0],event.timestamp_ms);break;
             case ARX_INGRESS_USB:
                 arx_runtime_usb_rx(&runtime_ctx,usb_ingress_data,event.length,event.timestamp_ms);
                 usb_ingress_pending=false;

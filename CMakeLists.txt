@@ -92,6 +92,7 @@ foreach(test_name
     crc
     features
     pedal_controller
+    pedal_host
     parity_core
     dyno_faults
     shift_exact

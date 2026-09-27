@@ -56,13 +56,24 @@ void arx_pedal_init(ArxPedalController *f) {
 }
 
 bool arx_pedal_set_mode(ArxPedalController *f, ArxPedalMode mode) {
-    if (!f || mode > ARX_PEDAL_KIDS_LIMITER) return false;
+    if (!f || (unsigned)mode > ARX_PEDAL_KIDS_LIMITER) return false;
+    if(f->mode!=mode){
+        f->disable_pending=mode==ARX_PEDAL_DISABLED;
+        f->waiting_reply=false;
+        f->applied_map=ARX_PEDAL_MAP_UNKNOWN;
+        f->communication=ARX_PEDAL_COMM_UNKNOWN;
+    }
     f->mode = mode;
     return true;
 }
 
 bool arx_pedal_set_power(ArxPedalController *f, int8_t power) {
     if (!f || power < -10 || power > 10) return false;
+    if(f->power!=power){
+        f->applied_map=ARX_PEDAL_MAP_UNKNOWN;
+        f->waiting_reply=false;
+        f->communication=ARX_PEDAL_COMM_UNKNOWN;
+    }
     f->power = power;
     return true;
 }
@@ -126,19 +137,58 @@ void arx_pedal_on_reply(ArxPedalController *f, uint8_t reply_byte) {
     f->reply_count++;
 }
 
+void arx_pedal_on_reply_at(ArxPedalController *f,uint8_t reply,uint32_t now_ms) {
+    if(!f)return;
+    const bool timely=f->waiting_reply && now_ms-f->last_tx_ms<=ARX_PEDAL_REPLY_TIMEOUT_MS;
+    arx_pedal_on_reply(f,reply);
+    f->last_reply_ms=now_ms;
+    if(!timely){
+        f->applied_map=ARX_PEDAL_MAP_UNKNOWN;
+        f->communication=f->waiting_reply?ARX_PEDAL_COMM_TIMEOUT:ARX_PEDAL_COMM_UNKNOWN;
+        f->waiting_reply=false;f->error_count++;
+        return;
+    }
+    f->waiting_reply=false;
+    if(f->applied_map==ARX_PEDAL_MAP_UNKNOWN){
+        f->communication=ARX_PEDAL_COMM_INVALID_REPLY;f->error_count++;
+    }else if(f->requested_map!=ARX_PEDAL_MAP_UNKNOWN && f->applied_map!=f->requested_map){
+        f->communication=ARX_PEDAL_COMM_MAP_MISMATCH;f->error_count++;
+    }else{
+        f->communication=ARX_PEDAL_COMM_MAP_CONFIRMED;
+        if(f->disable_pending&&f->applied_map==ARX_PEDAL_MAP_BYPASS)f->disable_pending=false;
+    }
+}
+
+void arx_pedal_note_send(ArxPedalController *f,bool success,uint32_t now_ms) {
+    if(!f)return;
+    f->last_tx_ms=now_ms;f->attempted=true;
+    f->waiting_reply=success;
+    f->communication=success?ARX_PEDAL_COMM_WAITING:ARX_PEDAL_COMM_TX_ERROR;
+    if(success)f->tx_count++;else f->error_count++;
+}
+
+void arx_pedal_tick(ArxPedalController *f,bool engine_running,uint32_t now_ms) {
+    if(!f)return;
+    if(f->waiting_reply&&now_ms-f->last_tx_ms>ARX_PEDAL_REPLY_TIMEOUT_MS){
+        f->waiting_reply=false;f->communication=ARX_PEDAL_COMM_TIMEOUT;f->error_count++;
+        f->applied_map=ARX_PEDAL_MAP_UNKNOWN;
+    }
+    if(!engine_running&&f->mode!=ARX_PEDAL_DISABLED)f->applied_map=ARX_PEDAL_MAP_UNKNOWN;
+}
+
 bool arx_pedal_needs_sync(
     const ArxPedalController *f,
     ArxDnaMode dna_mode,
     bool engine_running,
     uint32_t now_ms
 ) {
-    if (!f || !engine_running || f->mode == ARX_PEDAL_DISABLED) return false;
+    if (!f || f->waiting_reply || (!engine_running&&!f->disable_pending) ||
+        (f->mode == ARX_PEDAL_DISABLED&&!f->disable_pending)) return false;
 
     const ArxPedalMap target = arx_pedal_target_map(f, dna_mode);
     if (target == f->applied_map) return false;
 
-    return (f->last_tx_ms == 0u) ||
-           ((now_ms - f->last_tx_ms) >= f->retry_interval_ms);
+    return !f->attempted || ((now_ms - f->last_tx_ms) > f->retry_interval_ms);
 }
 
 bool arx_pedal_build_map_packet(
@@ -146,7 +196,7 @@ bool arx_pedal_build_map_packet(
     ArxPedalMap map,
     uint8_t out[ARX_PEDAL_PACKET_SIZE]
 ) {
-    if (!f || !out) return false;
+    if (!f || !out || map<ARX_PEDAL_MAP_BYPASS || map>ARX_PEDAL_MAP_RACE) return false;
 
     memset(out, 0, ARX_PEDAL_PACKET_SIZE);
     out[0] = '#';
@@ -207,10 +257,24 @@ bool arx_pedal_build_sync_packet(
 
     if (!arx_pedal_build_map_packet(&temp, target, out)) return false;
 
-    f->last_tx_ms = now_ms;
-    f->tx_count++;
+    f->requested_map=target;
     f->mismatch_count++;
     return true;
+}
+
+bool arx_pedal_prepare_packet(ArxPedalController *f,ArxDnaMode dna,
+    bool engine_running,bool diesel,uint16_t rpm,float speed,uint32_t now_ms,
+    uint8_t out[ARX_PEDAL_PACKET_SIZE]) {
+    if(!f||!out)return false;
+    arx_pedal_tick(f,engine_running,now_ms);
+    if(f->waiting_reply || (f->attempted&&now_ms-f->last_tx_ms<=f->retry_interval_ms))return false;
+    /* Upstream ensures the minimum-power A map first, independently of limiting. */
+    if(arx_pedal_build_sync_packet(f,dna,engine_running,now_ms,out))return true;
+    if(arx_pedal_kids_override_required(f,diesel,rpm,speed)){
+        f->requested_map=ARX_PEDAL_MAP_ALL_WEATHER;
+        return arx_pedal_build_zero_override(f,out);
+    }
+    return false;
 }
 
 bool arx_pedal_kids_override_required(
