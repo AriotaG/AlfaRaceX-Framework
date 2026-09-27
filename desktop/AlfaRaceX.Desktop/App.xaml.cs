@@ -35,6 +35,17 @@ public partial class App : Application
             if (Directory.Exists(DesktopPaths.TestRoot) || File.Exists(DesktopPaths.TestRoot)) return 3;
         }
         StartupLog.Write($"START version={typeof(App).Assembly.GetName().Version} executable={Environment.ProcessPath}");
+        StartupLog.Write("CONTEXT " + System.Text.Json.JsonSerializer.Serialize(new
+        {
+            processId = Environment.ProcessId,
+            workingDirectory = Environment.CurrentDirectory,
+            commandLine = Environment.CommandLine,
+            baseDirectory = AppContext.BaseDirectory,
+            dataRoot = DesktopPaths.Root,
+            database = DesktopPaths.Database,
+            backups = DesktopPaths.Backups,
+            webView2 = DesktopPaths.WebView2
+        }));
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             StartupLog.Write("UNHANDLED", e.ExceptionObject as Exception);
         VelopackApp.Build().Run();
@@ -54,7 +65,9 @@ public partial class App : Application
             StartupLog.Write("ACTIVATION_FOR_EXISTING_INSTANCE");
             return 0;
         }
+        StartupLog.Write("ENSURE_DATA_DIRECTORIES");
         DesktopPaths.Ensure();
+        StartupLog.Write("DATA_DIRECTORIES_READY");
         var app = new App();
         app.DispatcherUnhandledException += (_, e) => StartupLog.Write("UI_UNHANDLED", e.Exception);
         app.InitializeComponent();

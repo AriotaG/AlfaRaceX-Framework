@@ -35,8 +35,11 @@ public partial class MainWindow : Window
         Top = workArea.Top + (workArea.Height - Height) / 2;
         InitializeDeviceNotifications();
         DesktopPaths.Ensure();
+        StartupLog.Write("INITIALIZE_DATABASE");
         _history.Initialize();
+        StartupLog.Write("DATABASE_READY");
         int interrupted = _history.RecoverInterruptedOperations();
+        StartupLog.Write($"RECOVERY_CHECK_COMPLETE interruptedOperations={interrupted}");
         if (interrupted > 0)
             _history.AddEvent("ERROR", "RECOVERY", $"Rilevate {interrupted} operazioni interrotte. Verificare log, backup e dispositivo; nessuna ripresa automatica.");
         _history.AddEvent("INFO", "APP", $"Avvio AlfaRaceX Desktop {AppVersion}.");

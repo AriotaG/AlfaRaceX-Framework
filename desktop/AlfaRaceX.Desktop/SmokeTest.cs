@@ -166,8 +166,22 @@ internal static class SmokeTest
                 await Task.Delay(100);
             }
             string startup = File.ReadAllText(StartupLog.FilePath);
-            if (!startup.Contains("CREATE_MAIN_WINDOW") || !startup.Contains("WEBVIEW2_READY") || !startup.Contains("RESTORE_EXISTING_WINDOW"))
+            if (!startup.Contains("CREATE_MAIN_WINDOW") || !startup.Contains("WEBVIEW2_READY") || !startup.Contains("RESTORE_EXISTING_WINDOW") ||
+                !startup.Contains("CONTEXT ") || !startup.Contains("DATA_DIRECTORIES_READY") ||
+                !startup.Contains("DATABASE_READY") || !startup.Contains("RECOVERY_CHECK_COMPLETE"))
                 throw new InvalidOperationException("Diagnostica avvio/seconda istanza incompleta.");
+            string contextLine = File.ReadLines(StartupLog.FilePath).Single(x => x.Contains("[CONTEXT "));
+            int contextStart = contextLine.IndexOf("[CONTEXT ", StringComparison.Ordinal) + "[CONTEXT ".Length;
+            using (var context = System.Text.Json.JsonDocument.Parse(contextLine[contextStart..contextLine.LastIndexOf(']')]))
+            {
+                var root = context.RootElement;
+                if (root.GetProperty("processId").GetInt32() != Environment.ProcessId ||
+                    root.GetProperty("workingDirectory").GetString() != Environment.CurrentDirectory ||
+                    root.GetProperty("commandLine").GetString() != Environment.CommandLine ||
+                    root.GetProperty("dataRoot").GetString() != DesktopPaths.Root ||
+                    root.GetProperty("database").GetString() != DesktopPaths.Database)
+                    throw new InvalidOperationException("Contesto diagnostico diverso dal processo effettivo.");
+            }
             await AssertJs("document.styleSheets.length >= 2 && typeof bootstrap === 'object'", "risorse Bootstrap locali");
             File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), "PASS: WebView2, worker bridge, disclaimer persistito, preparazione reale dei tre firmware, controlli DFU, sei viste, Bootstrap locale, notifica Windows USB/debounce con enumerazione reale (senza hotplug fisico), secondo processo ripristina la prima finestra, log di avvio.");
             return 0;
