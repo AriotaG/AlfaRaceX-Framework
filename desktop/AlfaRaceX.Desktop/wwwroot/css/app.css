@@ -4,3 +4,4 @@
 #operationText,[data-operation-text]{min-width:0;white-space:pre-line;overflow-wrap:anywhere}.operation-row>strong{flex-shrink:0}
 
 .pedal-controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:18px 0}.pedal-controls input{width:90px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px}#page-pedal .metric strong{font-size:21px}
+#obdPanel{scroll-margin-top:120px}#obdPanel .form-control{background:var(--bg);color:var(--text);border:1px solid var(--line);max-width:240px}#obdPanel .table{--bs-table-bg:transparent;--bs-table-color:var(--text);--bs-table-border-color:var(--line);font-size:13px}#obdPanel td{overflow-wrap:anywhere}#obdPanel label{color:var(--muted);font-size:13px}

@@ -147,6 +147,26 @@ internal static class SmokeTest
                 await AssertJs("document.getElementById('pedalApplyBtn').disabled", "scrittura PedalRaceX bloccata dopo disconnessione");
             }
             finally { window.PedalTransportFactory = originalFactory; }
+            // TEST ONLY: real WebView bridge and shared decoder; no vehicle connection.
+            var originalObdFactory = window.ObdTransportFactory;
+            try
+            {
+                window.ObdTransportFactory = (_, _) => new ObdFixture();
+                await window.Browser.ExecuteScriptAsync("document.querySelector('.nav-item[data-page=dashboard]').click(); document.getElementById('obdHost').value='TEST-ONLY'; document.getElementById('obdPort').value='1234'; document.getElementById('obdReadBtn').click();");
+                deadline = DateTime.UtcNow.AddSeconds(15);
+                while (await window.Browser.ExecuteScriptAsync("document.querySelectorAll('#obdReadings tbody tr').length===10 && !document.getElementById('obdReadBtn').disabled") != "true")
+                {
+                    if (DateTime.UtcNow > deadline) throw new TimeoutException("OBD fixture did not reach the dashboard.");
+                    await Task.Delay(100);
+                }
+                await AssertJs("document.getElementById('obdReadings').textContent.includes((2000).toLocaleString('it-IT', {maximumFractionDigits:2})+' rpm') && document.getElementById('obdReadings').textContent.includes('NO DATA') && document.getElementById('obdStatus').textContent.includes('campioni storici')", "OBD samples and unsupported signals distinguished from live data");
+                await window.Browser.ExecuteScriptAsync("document.getElementById('obdPanel').scrollIntoView({block:'start'})");
+                await AssertJs("document.documentElement.scrollWidth<=window.innerWidth", "OBD panel has no horizontal overflow");
+                await using var capture = File.Create(Path.Combine(DesktopPaths.Root, "ui-obd-test-only.png"));
+                await window.Browser.CoreWebView2.CapturePreviewAsync(Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, capture);
+                await window.Browser.ExecuteScriptAsync("window.scrollTo(0,0)");
+            }
+            finally { window.ObdTransportFactory = originalObdFactory; }
             // Real UI -> backend -> release download -> HEX/hash validation. Never flash a device.
             await window.Browser.ExecuteScriptAsync("document.getElementById('prepareBtn').click()");
             deadline = DateTime.UtcNow.AddSeconds(60);
@@ -236,7 +256,7 @@ internal static class SmokeTest
                     throw new InvalidOperationException("Contesto diagnostico diverso dal processo effettivo.");
             }
             await AssertJs("document.styleSheets.length >= 2 && typeof bootstrap === 'object'", "risorse Bootstrap locali");
-            File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), "PASS: WebView2, worker bridge, disclaimer persistito, PedalRaceX lettura/applicazione/attesa/conferma/disconnessione con trasporto TEST ONLY e controlli visibili, preparazione reale dei tre firmware, controlli DFU, sette viste, Bootstrap locale, notifica Windows USB/debounce con enumerazione reale (senza hotplug fisico), secondo processo ripristina la prima finestra, log di avvio.");
+            File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), "PASS: WebView2, OBD read-only samples/errors with TEST ONLY transport, worker bridge, disclaimer persistito, PedalRaceX lettura/applicazione/attesa/conferma/disconnessione con trasporto TEST ONLY e controlli visibili, preparazione reale dei tre firmware, controlli DFU, sette viste, Bootstrap locale, notifica Windows USB/debounce con enumerazione reale (senza hotplug fisico), secondo processo ripristina la prima finestra, log di avvio.");
             return 0;
         }
         catch (Exception ex)
@@ -244,6 +264,19 @@ internal static class SmokeTest
             File.WriteAllText(Path.Combine(DesktopPaths.Root, "ui-smoke-result.txt"), ex.ToString());
             return 2;
         }
+    }
+
+    private sealed class ObdFixture : AlfaRaceX.Vehicle.IElmTransport
+    {
+        public bool IsConnected { get; private set; }
+        public Task ConnectAsync(CancellationToken token) { token.ThrowIfCancellationRequested(); IsConnected = true; return Task.CompletedTask; }
+        public Task<string> ExchangeAsync(string command, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            return Task.FromResult(command.StartsWith("AT", StringComparison.Ordinal) ? "OK\r" :
+                command == "02010C" ? "18DAF110 04 41 0C 1F 40 00 00 00\r" : "NO DATA\r");
+        }
+        public ValueTask DisposeAsync() { IsConnected = false; return ValueTask.CompletedTask; }
     }
 
     private sealed class PedalFixture : IPedalRaceXTransport

@@ -148,6 +148,9 @@ public partial class MainWindow : Window
             case "refreshDashboard":
                 await SendDashboardAsync();
                 break;
+            case "obdRead":
+                await ReadObdAsync(ReadString(payload, "host"), checked((int)ReadLong(payload, "port")));
+                break;
             case "loadManifest":
                 await SendManifestAsync(force: true);
                 break;

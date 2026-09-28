@@ -4,6 +4,19 @@
   const $ = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const host = (action, payload = {}) => window.chrome.webview.postMessage({ action, payload });
+  const obdRows = new Map();
+  function renderObd() {
+    $('obdReadings').innerHTML = '<table class="table"><thead><tr><th>Parametro</th><th>Campione</th><th>Ora</th><th>Esito</th></tr></thead><tbody>' +
+      [...obdRows.values()].map(r => `<tr><td>${esc(r.name)}</td><td>${r.value == null ? '—' : esc(r.value.toLocaleString('it-IT', { maximumFractionDigits: 2 }) + ' ' + r.unit)}</td><td>${r.observedUtc ? esc(new Date(r.observedUtc).toLocaleTimeString('it-IT')) : '—'}</td><td>${esc(r.message || `${r.provider} · ${Math.round(r.latencyMs)} ms`)}</td></tr>`).join('') + '</tbody></table>';
+  }
+  $('obdReadBtn').addEventListener('click', () => {
+    const port = Number($('obdPort').value);
+    if (!$('obdHost').value.trim() || !Number.isInteger(port) || port < 1 || port > 65535) {
+      toast('Indica indirizzo e porta TCP dell’adattatore.', 'OBD'); return;
+    }
+    host('obdRead', { host: $('obdHost').value.trim(), port });
+  });
+  $('obdCancelBtn').addEventListener('click', () => host('cancelOperation'));
 
   // Reuse the same real controls in every page where an operation can start.
   const operationParts = { operationText: 'data-operation-text', operationPercent: 'data-operation-percent', operationProgress: 'data-operation-progress', cancelBtn: 'data-cancel-operation' };
@@ -161,6 +174,9 @@
 
   function updateControls() {
     const allowed = state.disclaimerAccepted && !state.busy;
+    $('obdReadBtn').disabled = !allowed;
+    $('obdHost').disabled = !allowed;
+    $('obdPort').disabled = !allowed;
     const deviceReady = allowed && state.dfuCount === 1;
     $('pedalReadBtn').disabled = !allowed || !$('pedalPort').value;
     $('pedalPortsBtn').disabled = !allowed;
@@ -209,6 +225,11 @@
         toast('Disclaimer registrato. / Disclaimer accepted.', 'AlfaRaceX');
         break;
       case 'dashboard': renderDashboard(d); break;
+      case 'obdReset': obdRows.clear(); renderObd(); $('obdStatus').textContent = d.message; $('obdFaults').textContent = 'DTC motore non letti.'; break;
+      case 'obdFaults': $('obdFaults').textContent = d.message; break;
+      case 'obdReading':
+      case 'obdSignalError': obdRows.set(d.id, d); renderObd(); break;
+      case 'obdClosed': $('obdStatus').textContent = d.message; break;
       case 'manifest': renderManifest(d); break;
       case 'manifestError': toast(`Manifest firmware non disponibile: ${d.message}`, 'Connessione'); break;
       case 'backups': renderBackups(d); break;
@@ -223,7 +244,11 @@
       }
       case 'pedalStatus': renderPedal(d); break;
       case 'pedalUnavailable': clearPedal(); break;
-      case 'busy': setBusy(d.value); break;
+      case 'busy':
+        setBusy(d.value);
+        $('obdReadBtn').disabled = d.value || !state.disclaimerAccepted;
+        $('obdCancelBtn').disabled = !(d.value && d.category === 'OBD');
+        break;
       case 'operationProgress':
         renderOperation(d.message || 'Operazione in corso…', d.progress ?? 0);
         break;
