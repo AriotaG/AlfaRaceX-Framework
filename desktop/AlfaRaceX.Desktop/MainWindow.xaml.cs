@@ -149,7 +149,11 @@ public partial class MainWindow : Window
                 await SendDashboardAsync();
                 break;
             case "obdRead":
-                await ReadObdAsync(ReadString(payload, "host"), checked((int)ReadLong(payload, "port")));
+                await ReadObdAsync(ReadString(payload, "host"), checked((int)ReadLong(payload, "port")),
+                    payload.TryGetProperty("continuous", out var continuous) && continuous.GetBoolean());
+                break;
+            case "obdView":
+                SetObdView(payload.GetProperty("visible").GetBoolean(), ReadString(payload, "group"));
                 break;
             case "loadManifest":
                 await SendManifestAsync(force: true);

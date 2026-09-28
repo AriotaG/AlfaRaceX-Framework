@@ -5,18 +5,27 @@
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const host = (action, payload = {}) => window.chrome.webview.postMessage({ action, payload });
   const obdRows = new Map();
+  let obdLive = false;
+  const obdView = () => { if (state.disclaimerAccepted) host('obdView', { visible: state.page === 'dashboard', group: $('obdGroup').value }); };
   function renderObd() {
     $('obdReadings').innerHTML = '<table class="table"><thead><tr><th>Parametro</th><th>Campione</th><th>Ora</th><th>Esito</th></tr></thead><tbody>' +
-      [...obdRows.values()].map(r => `<tr><td>${esc(r.name)}</td><td>${r.value == null ? '—' : esc(r.value.toLocaleString('it-IT', { maximumFractionDigits: 2 }) + ' ' + r.unit)}</td><td>${r.observedUtc ? esc(new Date(r.observedUtc).toLocaleTimeString('it-IT')) : '—'}</td><td>${esc(r.message || `${r.provider} · ${Math.round(r.latencyMs)} ms`)}</td></tr>`).join('') + '</tbody></table>';
+      [...obdRows.values()].map(r => {
+        const stale = obdLive && r.observedUtc && Date.now() - Date.parse(r.observedUtc) > r.freshnessMs;
+        return `<tr><td>${esc(r.name)}</td><td>${r.value == null || stale ? '—' : esc(r.value.toLocaleString('it-IT', { maximumFractionDigits: 2 }) + ' ' + r.unit)}</td><td>${r.observedUtc ? esc(new Date(r.observedUtc).toLocaleTimeString('it-IT')) : '—'}</td><td>${esc(stale ? 'Dato scaduto · attesa nuova lettura' : r.message || `${r.provider} · ${Math.round(r.latencyMs)} ms`)}</td></tr>`;
+      }).join('') + '</tbody></table>';
   }
   $('obdReadBtn').addEventListener('click', () => {
     const port = Number($('obdPort').value);
     if (!$('obdHost').value.trim() || !Number.isInteger(port) || port < 1 || port > 65535) {
       toast('Indica indirizzo e porta TCP dell’adattatore.', 'OBD'); return;
     }
-    host('obdRead', { host: $('obdHost').value.trim(), port });
+    obdView();
+    host('obdRead', { host: $('obdHost').value.trim(), port, continuous: $('obdMode').value === 'continuous' });
   });
   $('obdCancelBtn').addEventListener('click', () => host('cancelOperation'));
+  $('obdStopGlobal').addEventListener('click', () => host('cancelOperation'));
+  $('obdGroup').addEventListener('change', () => { obdRows.clear(); renderObd(); obdView(); });
+  setInterval(() => { if (obdLive && state.page === 'dashboard') renderObd(); }, 1000);
 
   // Reuse the same real controls in every page where an operation can start.
   const operationParts = { operationText: 'data-operation-text', operationPercent: 'data-operation-percent', operationProgress: 'data-operation-progress', cancelBtn: 'data-cancel-operation' };
@@ -41,6 +50,7 @@
 
   function showPage(name) {
     state.page = name;
+    obdView();
     document.querySelectorAll('.page').forEach(x => x.classList.toggle('active', x.id === `page-${name}`));
     document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.dataset.page === name));
     const titles = { dashboard:'Dashboard', update:'Aggiornamento', backup:'Backup', restore:'Ripristino', logs:'Log', info:'Informazioni', pedal:'PedalRaceX' };
@@ -177,6 +187,7 @@
     $('obdReadBtn').disabled = !allowed;
     $('obdHost').disabled = !allowed;
     $('obdPort').disabled = !allowed;
+    $('obdMode').disabled = !allowed;
     const deviceReady = allowed && state.dfuCount === 1;
     $('pedalReadBtn').disabled = !allowed || !$('pedalPort').value;
     $('pedalPortsBtn').disabled = !allowed;
@@ -228,8 +239,11 @@
       case 'obdReset': obdRows.clear(); renderObd(); $('obdStatus').textContent = d.message; $('obdFaults').textContent = 'DTC motore non letti.'; break;
       case 'obdFaults': $('obdFaults').textContent = d.message; break;
       case 'obdReading':
+        if (obdLive) $('obdStatus').textContent = 'Monitoraggio attivo; polling sospeso quando la dashboard non è visibile.';
+        obdRows.set(d.id, d); renderObd(); break;
       case 'obdSignalError': obdRows.set(d.id, d); renderObd(); break;
-      case 'obdClosed': $('obdStatus').textContent = d.message; break;
+      case 'obdMonitoring': obdLive = true; $('obdStatus').textContent = d.message; break;
+      case 'obdClosed': obdLive = false; $('obdStatus').textContent = d.message; renderObd(); break;
       case 'manifest': renderManifest(d); break;
       case 'manifestError': toast(`Manifest firmware non disponibile: ${d.message}`, 'Connessione'); break;
       case 'backups': renderBackups(d); break;
@@ -248,6 +262,7 @@
         setBusy(d.value);
         $('obdReadBtn').disabled = d.value || !state.disclaimerAccepted;
         $('obdCancelBtn').disabled = !(d.value && d.category === 'OBD');
+        $('obdStopGlobal').hidden = !(d.value && d.category === 'OBD');
         break;
       case 'operationProgress':
         renderOperation(d.message || 'Operazione in corso…', d.progress ?? 0);

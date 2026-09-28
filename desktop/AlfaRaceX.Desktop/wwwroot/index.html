@@ -38,6 +38,7 @@
       <div class="top-actions">
         <span class="badge-soft" id="firmwareBadge">Firmware —</span>
         <button class="btn-arx ghost" id="refreshBtn">Aggiorna</button>
+        <button class="btn-arx ghost" id="obdStopGlobal" hidden>Ferma OBD</button>
       </div>
     </header>
 
@@ -62,11 +63,13 @@
 
       <section class="panel mb-3" id="obdPanel">
         <div class="panel-head"><div><span class="section-tag">STANDARD · SOLA LETTURA</span><h3>Diagnostica OBD</h3></div></div>
-        <p class="muted">Adattatore ELM Wi-Fi/TCP: usa indirizzo e porta indicati dal produttore. Il collegamento Bluetooth iPhone richiede l’identificazione dell’adattatore. SGW: accesso sconosciuto. Nessuna scrittura o funzione FULL viene abilitata da questa connessione.</p>
+        <p class="muted">Adattatore ELM Wi-Fi/TCP: usa indirizzo e porta indicati dal produttore. Il trasporto Bluetooth non è ancora disponibile in questa versione. SGW: accesso sconosciuto. Questa connessione esegue soltanto letture diagnostiche.</p>
         <div class="d-flex flex-wrap gap-2 align-items-end">
           <label>Indirizzo adattatore<input id="obdHost" class="form-control" autocomplete="off" maxlength="253"></label>
           <label>Porta TCP<input id="obdPort" class="form-control" type="number" min="1" max="65535"></label>
-          <button class="btn-arx" id="obdReadBtn">Leggi campioni OBD</button>
+          <label>Acquisizione<select class="form-control" id="obdMode"><option value="snapshot">Campioni + DTC</option><option value="continuous">Monitoraggio continuo</option></select></label>
+          <label>Gruppo continuo<select class="form-control" id="obdGroup"><option value="overview">Panoramica</option><option value="dpf">DPF</option><option value="all">Tutti i segnali</option><option value="dna">DNA grezzo · sperimentale</option></select></label>
+          <button class="btn-arx" id="obdReadBtn">Avvia lettura OBD</button>
           <button class="btn-arx ghost" id="obdCancelBtn" disabled>Annulla lettura</button>
         </div>
         <p id="obdStatus" class="muted mt-3" role="status">Nessuna sessione diagnostica.</p>

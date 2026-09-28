@@ -151,10 +151,12 @@ internal static class SmokeTest
             var originalObdFactory = window.ObdTransportFactory;
             try
             {
-                window.ObdTransportFactory = (_, _) => new ObdFixture();
+                var obdFixture = new ObdFixture();
+                window.ObdTransportFactory = (_, _) => obdFixture;
                 await window.Browser.ExecuteScriptAsync("document.querySelector('.nav-item[data-page=dashboard]').click(); document.getElementById('obdHost').value='TEST-ONLY'; document.getElementById('obdPort').value='1234'; document.getElementById('obdReadBtn').click();");
                 deadline = DateTime.UtcNow.AddSeconds(15);
-                while (await window.Browser.ExecuteScriptAsync("document.querySelectorAll('#obdReadings tbody tr').length===10 && !document.getElementById('obdReadBtn').disabled") != "true")
+                int signalCount = AlfaRaceX.Vehicle.ObdSignals.All.Count(s => !s.Experimental);
+                while (await window.Browser.ExecuteScriptAsync($"document.querySelectorAll('#obdReadings tbody tr').length==={signalCount} && !document.getElementById('obdReadBtn').disabled") != "true")
                 {
                     if (DateTime.UtcNow > deadline) throw new TimeoutException("OBD fixture did not reach the dashboard.");
                     await Task.Delay(100);
@@ -165,6 +167,33 @@ internal static class SmokeTest
                 await using var capture = File.Create(Path.Combine(DesktopPaths.Root, "ui-obd-test-only.png"));
                 await window.Browser.CoreWebView2.CapturePreviewAsync(Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, capture);
                 await window.Browser.ExecuteScriptAsync("window.scrollTo(0,0)");
+                await window.Browser.ExecuteScriptAsync("document.getElementById('obdMode').value='continuous'; document.getElementById('obdReadBtn').click();");
+                deadline = DateTime.UtcNow.AddSeconds(10);
+                int before = obdFixture.RpmReads;
+                while (obdFixture.RpmReads < before + 2)
+                {
+                    if (DateTime.UtcNow > deadline) throw new TimeoutException("Continuous OBD polling did not repeat live reads.");
+                    await Task.Delay(100);
+                }
+                await window.Browser.ExecuteScriptAsync("document.querySelector('.nav-item[data-page=info]').click()");
+                await Task.Delay(300);
+                int paused = obdFixture.RpmReads;
+                await Task.Delay(1200);
+                if (obdFixture.RpmReads != paused) throw new InvalidOperationException("Hidden OBD dashboard still polls.");
+                await window.Browser.ExecuteScriptAsync("document.querySelector('.nav-item[data-page=dashboard]').click()");
+                deadline = DateTime.UtcNow.AddSeconds(5);
+                while (obdFixture.RpmReads == paused)
+                {
+                    if (DateTime.UtcNow > deadline) throw new TimeoutException("Visible OBD dashboard did not resume polling.");
+                    await Task.Delay(100);
+                }
+                await window.Browser.ExecuteScriptAsync("document.getElementById('obdStopGlobal').click()");
+                deadline = DateTime.UtcNow.AddSeconds(5);
+                while (await window.Browser.ExecuteScriptAsync("!document.getElementById('obdReadBtn').disabled") != "true")
+                {
+                    if (DateTime.UtcNow > deadline) throw new TimeoutException("OBD cancellation did not release desktop controls.");
+                    await Task.Delay(100);
+                }
             }
             finally { window.ObdTransportFactory = originalObdFactory; }
             // Real UI -> backend -> release download -> HEX/hash validation. Never flash a device.
@@ -268,11 +297,13 @@ internal static class SmokeTest
 
     private sealed class ObdFixture : AlfaRaceX.Vehicle.IElmTransport
     {
+        internal int RpmReads;
         public bool IsConnected { get; private set; }
         public Task ConnectAsync(CancellationToken token) { token.ThrowIfCancellationRequested(); IsConnected = true; return Task.CompletedTask; }
         public Task<string> ExchangeAsync(string command, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
+            if (command == "02010C") Interlocked.Increment(ref RpmReads);
             return Task.FromResult(command.StartsWith("AT", StringComparison.Ordinal) ? "OK\r" :
                 command == "02010C" ? "18DAF110 04 41 0C 1F 40 00 00 00\r" : "NO DATA\r");
         }

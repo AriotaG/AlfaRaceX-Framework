@@ -15,6 +15,30 @@ internal static class ObdTests
 
     public static void Run(Action<string, Action> test)
     {
+        test("OBD polling prioritizes due signals without starving slow groups", () =>
+        {
+            var schedule = new ObdPollSchedule();
+            string[] selected = ["rpm", "battery"];
+            Check(schedule.Select(selected, TimeSpan.Zero) == "rpm");
+            schedule.Complete("rpm", TimeSpan.Zero, TimeSpan.FromMilliseconds(20), true);
+            Check(schedule.Select(selected, TimeSpan.FromMilliseconds(199)) is null);
+            Check(schedule.Select(selected, TimeSpan.FromMilliseconds(200)) == "battery");
+            schedule.Complete("battery", TimeSpan.FromMilliseconds(200), TimeSpan.Zero, true);
+            Check(schedule.Select(selected, TimeSpan.FromMilliseconds(500)) == "rpm");
+            Check(schedule.Select([], TimeSpan.FromHours(1)) is null);
+        });
+        test("OBD polling backs off unsupported signals and adapts to latency", () =>
+        {
+            var schedule = new ObdPollSchedule();
+            Check(schedule.Select(["rpm"], TimeSpan.Zero) == "rpm");
+            schedule.Complete("rpm", TimeSpan.Zero, TimeSpan.FromSeconds(3), false);
+            Check(schedule.MinimumGap > TimeSpan.FromMilliseconds(200));
+            Check(schedule.Select(["rpm"], TimeSpan.FromSeconds(3)) is null);
+            Check(schedule.Select(["rpm"], TimeSpan.FromSeconds(4)) == "rpm");
+            schedule.Complete("rpm", TimeSpan.FromSeconds(4), TimeSpan.Zero, false);
+            Check(schedule.Select(["rpm"], TimeSpan.FromSeconds(11)) is null);
+            Check(schedule.Select(["rpm"], TimeSpan.FromSeconds(12)) == "rpm");
+        });
         test("OBD rejects unbounded transport timeout and command injection", () =>
         {
             try { StreamElmTransport.Tcp("localhost", 1234, Timeout.InfiniteTimeSpan); throw new Exception("Infinite timeout accepted"); }
@@ -101,7 +125,7 @@ internal static class ObdTests
         {
             using var peer = await listener.AcceptTcpClientAsync(deadline.Token);
             using var stream = peer.GetStream();
-            var commands = new[] { "ATZ", "ATE0", "ATL0", "ATS1", "ATH1", "ATD0", "ATCAF0", "ATCFC1", "ATSP7", "ATSH18DA10F1", "ATCRA18DAF110", "02010C", "032218E4", "02010D", "031902FF" };
+            var commands = new[] { "ATZ", "ATE0", "ATL0", "ATS1", "ATH1", "ATD0", "ATCAF0", "ATCFC1", "ATSP7", "ATSH18DA10F1", "ATCRA18DAF110", "02010C", "032218E4", "02010D", "ATSH18DA18F1", "ATCRA18DAF118", "03220518", "ATSH18DA10F1", "ATCRA18DAF110", "031902FF" };
             foreach (var expected in commands)
             {
                 Check(await ReadCommand(stream, deadline.Token) == expected);
@@ -112,6 +136,7 @@ internal static class ObdTests
                     "032218E4" => "18DAF110 05 62 18 E4 FF FF 00 00\r>",
                     "02010D" => "18DAF110 03 7F 01 11 00 00 00 00\r>",
                     "031902FF" => "18DAF110 07 59 02 FF 12 34 56 09\r>",
+                    "03220518" => "18DAF118 04 62 05 18 02 00 00 00\r>",
                     _ => "OK\r>"
                 };
                 foreach (byte b in Encoding.ASCII.GetBytes(response))
@@ -127,6 +152,8 @@ internal static class ObdTests
         Check((await client.ReadAsync("dpf_load", deadline.Token)).Value == 1000);
         try { await client.ReadAsync("speed", deadline.Token); throw new Exception("Negative reply accepted"); }
         catch (InvalidDataException) { }
+        Check((await client.ReadAsync("dna_tcm_0518", deadline.Token)).Value == 2);
+        Check(!client.Capabilities.HasFlag(VehicleCapabilities.AutomaticDna));
         Check((await client.ReadEngineFaultsAsync(deadline.Token)).Faults.Single().RawCode == "123456");
         Check(client.Capabilities == (VehicleCapabilities.TelemetryObd | VehicleCapabilities.DtcRead));
         await server;
