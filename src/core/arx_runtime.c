@@ -147,7 +147,10 @@ static bool elm_usb_emit_event(ArxRuntime *rt,const ArxElmRxEvent *event) {
     /* Reserve the entire formatted response plus final prompt before emitting
        any byte. An unconsumed USB queue must not turn truncation into success. */
     const size_t line_end=rt->elm.linefeeds?2u:1u;
-    const size_t required=(rt->elm.headers?(event->extended_id?9u:4u):0u)+
+    const size_t header_length=rt->elm.headers?
+        (event->extended_id?8u:3u)+(rt->elm.spaces?1u:0u)+
+        (rt->elm.display_dlc?1u+(rt->elm.spaces?1u:0u):0u):0u;
+    const size_t required=header_length+
         2u*event->length+(rt->elm.spaces&&event->length?event->length-1u:0u)+
         2u*line_end+1u;
     elm_usb_compact(rt);
@@ -157,7 +160,12 @@ static bool elm_usb_emit_event(ArxRuntime *rt,const ArxElmRxEvent *event) {
     }
     if(rt->elm.headers){
         elm_usb_hex_id(rt,event->can_id,event->extended_id);
-        (void)elm_usb_text(rt," ");
+        if(rt->elm.spaces)(void)elm_usb_text(rt," ");
+        if(rt->elm.display_dlc){
+            const char dlc=elm_hex((uint8_t)event->length);
+            (void)elm_usb_queue(rt,&dlc,1u);
+            if(rt->elm.spaces)(void)elm_usb_text(rt," ");
+        }
     }
     for(uint16_t i=0u;i<event->length;i++){
         elm_usb_hex_byte(rt,event->data[i]);
@@ -304,6 +312,10 @@ static void elm_handle_response(
     rt->elm_deadline_ms=now_ms+rt->elm.timeout_ms;
 
     if(kind==ARX_ELM_RX_NEED_FLOW_CONTROL){
+        if(event.length && !elm_usb_emit_event(rt,&event)){
+            elm_finish_request(rt,false);
+            return;
+        }
         ArxCanFrame fc;
         if(arx_elm_transaction_build_flow_control(
             &rt->elm_transaction,&rt->elm,now_ms,&fc
@@ -318,7 +330,7 @@ static void elm_handle_response(
 
     if(kind==ARX_ELM_RX_RAW_FRAME||kind==ARX_ELM_RX_PAYLOAD){
         const bool emitted=elm_usb_emit_event(rt,&event);
-        elm_finish_request(rt,emitted);
+        if(!emitted||!rt->elm_transaction.active)elm_finish_request(rt,emitted);
         return;
     }
 

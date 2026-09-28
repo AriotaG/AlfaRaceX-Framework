@@ -33,6 +33,22 @@ int main(void) {
     arx_elm327_init(&e); e.enabled=true;
     char reply[160];
 
+    /* An unsupported command and an unmeasured voltage must not report success. */
+    arx_elm327_command(&e,"ATNOTIMPLEMENTED",reply,sizeof(reply));
+    assert(strstr(reply,"?") && !strstr(reply,"OK"));
+    arx_elm327_command(&e,"ATFCINVALID",reply,sizeof(reply));
+    assert(strstr(reply,"?"));
+    arx_elm327_command(&e,"ATBRD02",reply,sizeof(reply));
+    assert(strstr(reply,"?")); /* USB baud-switch handshake is not implemented. */
+    arx_elm327_command(&e,"ATRV",reply,sizeof(reply));
+    assert(strstr(reply,"?") && !strstr(reply,"12.3"));
+    arx_elm327_command(&e,"ATD0",reply,sizeof(reply));
+    assert(strstr(reply,"OK"));
+    arx_elm327_command(&e,"ATD1",reply,sizeof(reply));
+    assert(strstr(reply,"OK") && e.display_dlc);
+    arx_elm327_command(&e,"ATD0",reply,sizeof(reply));
+    assert(!e.display_dlc);
+
     arx_elm327_command(&e,"ATI",reply,sizeof(reply));
     assert(strstr(reply,"ELM327 v1.4"));
     arx_elm327_command(&e,"AT@1",reply,sizeof(reply));

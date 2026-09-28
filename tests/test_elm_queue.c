@@ -5,7 +5,37 @@
 #define CHECK(x) do { if(!(x)){fprintf(stderr,"FAIL line %d: %s\n",__LINE__,#x);exit(1);} } while(0)
 static ArxCanFrame last;
 static ArxStatus send_frame(const ArxCanFrame *f,void *user){(void)user;last=*f;return ARX_STATUS_OK;}
+static void raw_multiframe(bool auto_format,bool dlc,bool spaces){
+    ArxRuntime rt;ArxRuntimeOps ops={.can_send=send_frame};
+    arx_runtime_init(&rt,ARX_RUNTIME_C1,&ops);
+    ArxRuntimeConfig cfg;arx_config_defaults(&cfg);cfg.elm327_enabled=true;
+    arx_runtime_apply_config(&rt,&cfg,10);
+    rt.elm.tx_header=0x7E0u;rt.elm.headers=true;rt.elm.echo=false;
+    rt.elm.display_dlc=dlc;rt.elm.spaces=spaces;
+    rt.elm.auto_format=auto_format;rt.elm.auto_flow_control=true;
+    const char *request=auto_format?"221234\r":"03221234\r";
+    arx_runtime_usb_rx(&rt,(const uint8_t *)request,strlen(request),100);
+    CHECK(arx_runtime_drain_can(&rt,100,1)==1);
+    CHECK(last.data[0]==3 && last.data[1]==0x22 && last.dlc==8);
+    ArxCanFrame ff={.bus=ARX_BUS_C1,.id=0x7E8,.dlc=8,.data={0x10,10,0x62,0x12,0x34,1,2,3}};
+    arx_runtime_on_can(&rt,&ff,101);
+    CHECK(rt.elm_request_active); /* No prompt after an incomplete response. */
+    CHECK(arx_runtime_drain_can(&rt,101,1)==1);
+    CHECK(last.id==0x7E0 && last.data[0]==0x30);
+    const char *first=spaces?(dlc?"7E8 8 10 0A 62 12 34 01 02 03":"7E8 10 0A 62 12 34 01 02 03"):
+        (dlc?"7E88100A621234010203":"7E8100A621234010203");
+    CHECK(strstr((char *)rt.elm_usb_tx,first));
+    CHECK(!memchr(rt.elm_usb_tx,'>',rt.elm_usb_tx_len));
+    ArxCanFrame cf={.bus=ARX_BUS_C1,.id=0x7E8,.dlc=8,.data={0x21,4,5,6,7,0,0,0}};
+    arx_runtime_on_can(&rt,&cf,102);
+    CHECK(!rt.elm_request_active);
+    const char *second=spaces?(dlc?"7E8 8 21 04 05 06 07 00 00 00":"7E8 21 04 05 06 07 00 00 00"):
+        (dlc?"7E882104050607000000":"7E82104050607000000");
+    CHECK(strstr((char *)rt.elm_usb_tx,second));
+    CHECK(memchr(rt.elm_usb_tx,'>',rt.elm_usb_tx_len));
+}
 int main(void){
+    for(unsigned mode=0;mode<8;mode++)raw_multiframe((mode&1)!=0,(mode&2)!=0,(mode&4)!=0);
     ArxRuntime rt;ArxRuntimeOps ops={.can_send=send_frame};
     arx_runtime_init(&rt,ARX_RUNTIME_C1,&ops);
     ArxRuntimeConfig cfg;arx_config_defaults(&cfg);cfg.elm327_enabled=true;

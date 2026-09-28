@@ -37,6 +37,7 @@ typedef struct {
     bool enabled;
     bool echo;
     bool headers;
+    bool display_dlc;
     bool spaces;
     bool linefeeds;
     bool variable_dlc;

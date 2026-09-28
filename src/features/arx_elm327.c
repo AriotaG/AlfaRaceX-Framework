@@ -257,6 +257,8 @@ size_t arx_elm327_command(ArxElm327 *f,const char *command,char *reply,size_t ca
     else if(!strcmp(at,"H1")) {f->headers=true;}
     else if(!strcmp(at,"S0")) {f->spaces=false;}
     else if(!strcmp(at,"S1")) {f->spaces=true;}
+    else if(!strcmp(at,"D0")) {f->display_dlc=false;}
+    else if(!strcmp(at,"D1")) {f->display_dlc=true;}
     else if(!strcmp(at,"V0")) {f->variable_dlc=false;}
     else if(!strcmp(at,"V1")) {f->variable_dlc=true;}
     else if(!strcmp(at,"CAF0")) {f->auto_format=false;}
@@ -283,7 +285,9 @@ size_t arx_elm327_command(ArxElm327 *f,const char *command,char *reply,size_t ca
         if(pos+1u<sizeof(body)) body[pos++]=protocol_number(f->protocol);
         body[pos]='\0';
     } else if(!strcmp(at,"RV")) {
-        strcpy(body,"12.3V");
+        /* No target voltage divider/measurement is available. Never synthesize
+           a battery voltage merely to satisfy a diagnostic client's query. */
+        strcpy(body,"?");
     } else if(strlen(at)==3u && at[0]=='A' && at[1]=='T' && at[2]>='0'&&at[2]<='2') {
         f->adaptive_timing=(uint8_t)(at[2]-'0');
     } else if(!strncmp(at,"ST",2)) {
@@ -388,14 +392,9 @@ size_t arx_elm327_command(ArxElm327 *f,const char *command,char *reply,size_t ca
         if(*p=='A'){automatic=true;p++;}
         if(strlen(p)==1u && set_protocol_number(f,*p,automatic)) {;}
         else strcpy(body,"?");
-    } else if(!strncmp(at,"IB",2)||!strncmp(at,"FC",2)||!strncmp(at,"BRT",3)) {
-        ;
-    } else if(!strncmp(at,"BRD",3)) {
-        /* USB CDC baud is virtual; transport performs the formal handshake. */
-        strcpy(body,"OK");
     } else {
-        /* Compatibility default: unknown AT extensions are accepted. */
-        strcpy(body,"OK");
+        /* Unsupported settings must not be advertised as successfully applied. */
+        strcpy(body,"?");
     }
 
     return finish(f,body,reply,cap);

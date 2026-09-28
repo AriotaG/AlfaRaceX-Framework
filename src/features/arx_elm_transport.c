@@ -158,8 +158,9 @@ bool arx_elm_transaction_start(
         first->bus=bus;
         first->id=cfg->tx_header;
         first->extended_id=cfg->tx_extended;
-        first->dlc=(uint8_t)payload_length;
+        first->dlc=cfg->variable_dlc?(uint8_t)payload_length:8u;
         first->timestamp_ms=now_ms;
+        memset(first->data,ARX_ELM_PAD_BYTE,sizeof(first->data));
         memcpy(first->data,payload,payload_length);
         return true;
     }
@@ -216,7 +217,7 @@ ArxElmRxEventType arx_elm_transaction_on_rx(
     e->can_id=frame->id;
     e->extended_id=frame->extended_id;
 
-    if(t->raw_mode){
+    if(t->raw_mode && (!cfg->auto_flow_control || (frame->data[0]>>4u)>2u)){
         e->type=ARX_ELM_RX_RAW_FRAME;
         e->length=frame->dlc>8u?8u:frame->dlc;
         memcpy(e->data,frame->data,e->length);
@@ -241,6 +242,13 @@ ArxElmRxEventType arx_elm_transaction_on_rx(
         return e->type;
     }
 
+    /* CAF controls transmission formatting; H1 only changes presentation.
+       CFC1 must still receive/reassemble ISO-TP when CAF0 supplies explicit PCI. */
+    const bool show_raw=t->raw_mode||cfg->headers;
+    if(show_raw){
+        e->length=frame->dlc;
+        memcpy(e->data,frame->data,e->length);
+    }
     const ArxIsoTpRxEvent r=arx_isotp_rx_feed(&t->rx,frame);
     if(r==ARX_ISOTP_RX_EVENT_ERROR){
         e->type=ARX_ELM_RX_ERROR;
@@ -251,14 +259,19 @@ ArxElmRxEventType arx_elm_transaction_on_rx(
         e->type=ARX_ELM_RX_NEED_FLOW_CONTROL;
         return e->type;
     }
-    if(r!=ARX_ISOTP_RX_EVENT_COMPLETE) return ARX_ELM_RX_NONE;
+    if(r!=ARX_ISOTP_RX_EVENT_COMPLETE){
+        e->type=show_raw?ARX_ELM_RX_RAW_FRAME:ARX_ELM_RX_NONE;
+        return e->type;
+    }
 
-    e->length=t->rx.received;
-    memcpy(e->data,t->rx.payload,e->length);
+    if(!show_raw){
+        e->length=t->rx.received;
+        memcpy(e->data,t->rx.payload,e->length);
+    }
 
-    if(e->length>=3u &&
-       e->data[0]==0x7Fu &&
-       e->data[2]==0x78u){
+    if(t->rx.received>=3u &&
+       t->rx.payload[0]==0x7Fu &&
+       t->rx.payload[2]==0x78u){
         t->saw_response_pending=true;
         e->type=ARX_ELM_RX_PENDING;
         arx_isotp_rx_init(&t->rx);
@@ -266,7 +279,7 @@ ArxElmRxEventType arx_elm_transaction_on_rx(
         return e->type;
     }
 
-    e->type=ARX_ELM_RX_PAYLOAD;
+    e->type=show_raw?ARX_ELM_RX_RAW_FRAME:ARX_ELM_RX_PAYLOAD;
     t->received_responses++;
     t->active=false;
     return e->type;
