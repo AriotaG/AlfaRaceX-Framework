@@ -7,6 +7,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../shared/AlfaRaceX.Vehicle/AlfaRaceX.Vehicle.csproj" />
     <None Include="../../distribution/release-candidate.json" Link="release-candidate.json" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../../updater/AlfaRaceX.Updater/IntelHexImage.cs" Link="IntelHexImage.cs" />
     <Compile Include="../../updater/AlfaRaceX.Updater/ManifestClient.cs" Link="ManifestClient.cs" />

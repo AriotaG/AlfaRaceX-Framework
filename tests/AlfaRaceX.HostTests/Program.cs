@@ -30,6 +30,7 @@ void Reject(Action action)
 }
 try
 {
+    ObdTests.Run(Test);
     Test("valid HEX range and segments", () => {
         var image = Load(upper, payload, eof);
         image.ValidateApplicationRange(0x08000000, 0x0800F000);
