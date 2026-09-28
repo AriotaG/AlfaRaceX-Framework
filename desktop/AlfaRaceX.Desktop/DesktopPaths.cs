@@ -2,7 +2,8 @@ namespace AlfaRaceX.Desktop;
 
 internal static class DesktopPaths
 {
-    public static string Root => Path.Combine(
+    internal static string? TestRoot { get; set; }
+    public static string Root => TestRoot ?? Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "AlfaRaceX",
         "Desktop");

@@ -20,6 +20,7 @@
       <button class="nav-item" data-page="backup"><span>▣</span> Backup</button>
       <button class="nav-item" data-page="restore"><span>↺</span> Ripristino</button>
       <button class="nav-item" data-page="logs"><span>≡</span> Log</button>
+      <button class="nav-item" data-page="pedal"><span>↗</span> PedalRaceX</button>
       <button class="nav-item" data-page="info"><span>ⓘ</span> Informazioni</button>
     </nav>
     <div class="sidebar-footer">
@@ -37,9 +38,11 @@
       <div class="top-actions">
         <span class="badge-soft" id="firmwareBadge">Firmware —</span>
         <button class="btn-arx ghost" id="refreshBtn">Aggiorna</button>
+        <button class="btn-arx ghost" id="obdStopGlobal" hidden>Ferma OBD</button>
       </div>
     </header>
 
+    <div id="recoveryNotice" class="alert alert-warning" role="alert" hidden></div>
     <section class="page active" id="page-dashboard">
       <div class="hero-card">
         <div class="hero-overlay"></div>
@@ -52,12 +55,27 @@
       </div>
 
       <div class="metric-grid">
-        <article class="metric"><span>Firmware</span><strong id="metricFirmware">—</strong><small id="metricChannel">Release Candidate</small></article>
+        <article class="metric"><span>Firmware disponibile</span><strong id="metricFirmware">—</strong><small id="metricChannel">Release Candidate</small></article>
         <article class="metric"><span>Dispositivo DFU</span><strong id="metricDevice">Non rilevato</strong><small id="metricDeviceHint">Collega un solo modulo</small></article>
         <article class="metric"><span>Backup catalogati</span><strong id="metricBackups">0</strong><small>SQLite locale</small></article>
         <article class="metric"><span>Desktop</span><strong id="metricApp">—</strong><small>Windows x64</small></article>
       </div>
 
+      <section class="panel mb-3" id="obdPanel">
+        <div class="panel-head"><div><span class="section-tag">STANDARD · SOLA LETTURA</span><h3>Diagnostica OBD</h3></div></div>
+        <p class="muted">Adattatore ELM Wi-Fi/TCP: usa indirizzo e porta indicati dal produttore. Il trasporto Bluetooth non è ancora disponibile in questa versione. SGW: accesso sconosciuto. Questa connessione esegue soltanto letture diagnostiche.</p>
+        <div class="d-flex flex-wrap gap-2 align-items-end">
+          <label>Indirizzo adattatore<input id="obdHost" class="form-control" autocomplete="off" maxlength="253"></label>
+          <label>Porta TCP<input id="obdPort" class="form-control" type="number" min="1" max="65535"></label>
+          <label>Acquisizione<select class="form-control" id="obdMode"><option value="snapshot">Campioni + DTC</option><option value="continuous">Monitoraggio continuo</option></select></label>
+          <label>Gruppo continuo<select class="form-control" id="obdGroup"><option value="overview">Panoramica</option><option value="dpf">DPF</option><option value="all">Tutti i segnali</option><option value="dna">DNA grezzo · sperimentale</option></select></label>
+          <button class="btn-arx" id="obdReadBtn">Avvia lettura OBD</button>
+          <button class="btn-arx ghost" id="obdCancelBtn" disabled>Annulla lettura</button>
+        </div>
+        <p id="obdStatus" class="muted mt-3" role="status">Nessuna sessione diagnostica.</p>
+        <div id="obdReadings" class="table-responsive"></div>
+        <p id="obdFaults" class="muted">DTC motore non letti.</p>
+      </section>
       <div class="panel-grid two">
         <section class="panel">
           <div class="panel-head"><div><span class="section-tag">STATO</span><h3>Workflow consigliato</h3></div></div>
@@ -76,6 +94,31 @@
       </div>
     </section>
 
+    <section class="page" id="page-pedal">
+      <div class="section-intro"><div><span class="section-tag">PEDALRACEX</span><h2>Risposta del pedale</h2><p>Gestione del modulo esterno attraverso AlfaRaceX C1.</p></div></div>
+      <section class="panel">
+        <h3>Collegamento C1</h3>
+        <p class="muted">Attiva la modalità diagnostica USB su C1 e seleziona la sua porta. DFU non supporta questi controlli. Le impostazioni qui applicate durano fino al riavvio; il profilo banco riparte disabilitato.</p>
+        <div class="pedal-controls"><label for="pedalPort">Porta C1</label><select id="pedalPort"><option value="">Seleziona una porta</option></select><button class="btn-arx ghost" id="pedalPortsBtn">Aggiorna porte</button><button class="btn-arx" id="pedalReadBtn" disabled>Leggi stato</button></div>
+        <p class="muted" id="pedalObserved">Nessuna lettura. Stato hardware non verificato.</p>
+      </section>
+      <div class="metric-grid mt-3">
+        <article class="metric"><span>Comunicazione</span><strong id="pedalComm">Non verificata</strong><small id="pedalReplyAge">Nessuna risposta osservata</small></article>
+        <article class="metric"><span>Mappa richiesta</span><strong id="pedalRequested">—</strong><small>Calcolata da C1</small></article>
+        <article class="metric"><span>Mappa restituita</span><strong id="pedalApplied">—</strong><small>Risposta del modulo esterno</small></article>
+        <article class="metric"><span>Vettura</span><strong id="pedalVehicle">—</strong><small id="pedalPermission">Lettura necessaria</small></article>
+      </div>
+      <section class="panel mt-3">
+        <h3>Modalità e potenza</h3>
+        <div class="pedal-controls"><label for="pedalMode">Modalità operativa</label><select id="pedalMode">
+          <option value="0">Disabilitato</option><option value="1">Automatic Map · segue DNA</option><option value="2">Bypass</option><option value="3">All Weather</option><option value="4">Natural</option><option value="5">Dynamic</option><option value="6">Race</option><option value="7">Hybrid Align</option><option value="8">Kids Limiter</option>
+        </select><label for="pedalPower">Potenza −10 / +10</label><input id="pedalPower" type="number" min="-10" max="10" step="1" value="0"><button class="btn-arx" id="pedalApplyBtn" disabled>Applica a C1</button></div>
+        <p class="muted" id="pedalModeHelp">Disabilitato: richiede Bypass prima di interrompere i comandi.</p>
+        <p class="muted">La risposta conferma soltanto la mappa: il protocollo esterno non offre lettura separata della potenza né rilevamento continuo della connessione. Dopo l'applicazione, usa «Leggi stato» per controllare risposta ed eventuali errori.</p>
+        <details><summary>Diagnostica comunicazione</summary><p id="pedalDiagnostics">Nessun dato ricevuto.</p></details>
+      </section>
+    </section>
+
     <section class="page" id="page-update">
       <div class="section-intro">
         <div><span class="section-tag">FIRMWARE</span><h2>Aggiornamento moduli</h2><p>Il pacchetto viene scaricato, verificato SHA-256 e poi programmato su un modulo alla volta.</p></div>
@@ -90,7 +133,7 @@
     </section>
 
     <section class="page" id="page-backup">
-      <div class="section-intro"><div><span class="section-tag">PROTEZIONE</span><h2>Backup completo</h2><p>Lettura integrale della Flash, hash SHA-256, metadati JSON e catalogazione SQLite.</p></div></div>
+      <div class="section-intro"><div><span class="section-tag">PROTEZIONE</span><h2>Backup Flash interna</h2><p>Lettura della Flash interna da 128 KiB prevista dal progetto, hash SHA-256 e metadati. Sono esclusi option bytes, OTP e ROM di sistema. Il ruolo MCU selezionato non è identificato automaticamente.</p></div></div>
       <section class="panel backup-panel">
         <label>Modulo da salvare</label>
         <div class="role-picker" id="backupRoles">

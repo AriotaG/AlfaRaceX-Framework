@@ -7,13 +7,12 @@ void arx_config_defaults(ArxRuntimeConfig *c) {
     memset(c,0,sizeof(*c));
 
     /*
-     * Clean-flash defaults mirror the deployed compile-time fallback profile:
-     * active-by-default core services stay active; optional vehicle features
-     * remain disabled until stored configuration enables them.
+     * A clean or erased configuration must not enable unvalidated vehicle
+     * interventions. Explicit stored values remain supported by the importer.
      */
-    c->immobilizer_enabled=true;
-    c->smart_start_stop_enabled=true;
-    c->clear_faults_enabled=true;
+    c->immobilizer_enabled=false;
+    c->smart_start_stop_enabled=false;
+    c->clear_faults_enabled=false;
     c->diesel_profile=true;
     c->seatbelt_alarm_enabled=true;
 
@@ -31,6 +30,36 @@ void arx_config_defaults(ArxRuntimeConfig *c) {
     c->telemetry_enabled=true;
     c->diagnostics_enabled=true;
     c->sgw_detection_enabled=true;
+    c->dynamic_shift_in_dynamic_enabled=false;
+}
+
+void arx_config_apply_bench_start(ArxRuntimeConfig *c) {
+    if(!c)return;
+    c->immobilizer_enabled=false;
+    c->smart_start_stop_enabled=false;
+    c->shift_indicator_enabled=false;
+    c->route_messages_enabled=false;
+    c->dyno_enabled=false;
+    c->acc_virtual_pad_enabled=false;
+    c->front_brake_override_enabled=false;
+    c->awd_control_enabled=false;
+    c->clear_faults_enabled=false;
+    c->esc_tc_customizer_enabled=false;
+    c->read_faults_enabled=false;
+    c->regeneration_alert_enabled=false;
+    c->pedal_mode=ARX_CFG_PEDAL_DISABLED;
+    c->pedal_power=0;
+    c->odometer_blink_mask_enabled=false;
+    c->race_mask_enabled=false;
+    c->park_mirror_enabled=false;
+    c->acc_autostart_mode=0;
+    c->close_windows_mode=0;
+    c->open_windows_mode=0;
+    c->has_virtual_pad_enabled=false;
+    c->exhaust_flap_enabled=false;
+    c->front_park_mute_enabled=false;
+    c->diagnostics_enabled=false;
+    c->sgw_detection_enabled=false;
     c->dynamic_shift_in_dynamic_enabled=false;
 }
 
@@ -139,8 +168,8 @@ bool arx_config_import_legacy_slots(
 
     /*
      * An erased half-word is 0xFFFF. For boolean settings the deployed reader
-     * accepts only 0/1 and otherwise falls back to the compile-time default.
-     * Keep exactly that semantic rather than treating 0xFFFF as true.
+     * accepts only 0/1; invalid or erased values use safe ARX defaults.
+     * Explicit saved choices are preserved rather than treating 0xFFFF as true.
      */
 #define ARX_IMPORT_BOOL(field, idx) \
     do { if (s[(idx)] <= 1u) c->field = (s[(idx)] != 0u); } while (0)

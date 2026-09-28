@@ -33,6 +33,22 @@ int main(void) {
     arx_elm327_init(&e); e.enabled=true;
     char reply[160];
 
+    /* An unsupported command and an unmeasured voltage must not report success. */
+    arx_elm327_command(&e,"ATNOTIMPLEMENTED",reply,sizeof(reply));
+    assert(strstr(reply,"?") && !strstr(reply,"OK"));
+    arx_elm327_command(&e,"ATFCINVALID",reply,sizeof(reply));
+    assert(strstr(reply,"?"));
+    arx_elm327_command(&e,"ATBRD02",reply,sizeof(reply));
+    assert(strstr(reply,"?")); /* USB baud-switch handshake is not implemented. */
+    arx_elm327_command(&e,"ATRV",reply,sizeof(reply));
+    assert(strstr(reply,"?") && !strstr(reply,"12.3"));
+    arx_elm327_command(&e,"ATD0",reply,sizeof(reply));
+    assert(strstr(reply,"OK"));
+    arx_elm327_command(&e,"ATD1",reply,sizeof(reply));
+    assert(strstr(reply,"OK") && e.display_dlc);
+    arx_elm327_command(&e,"ATD0",reply,sizeof(reply));
+    assert(!e.display_dlc);
+
     arx_elm327_command(&e,"ATI",reply,sizeof(reply));
     assert(strstr(reply,"ELM327 v1.4"));
     arx_elm327_command(&e,"AT@1",reply,sizeof(reply));
@@ -67,6 +83,20 @@ int main(void) {
     memset(oversized_hex,'A',sizeof(oversized_hex)-1u);
     oversized_hex[sizeof(oversized_hex)-1u]='\0';
     assert(!arx_elm327_prepare_request(&e,oversized_hex,&raw_req));
+    char maximum_hex[ARX_ELM_MAX_PAYLOAD*3u+3u];
+    for(size_t i=0;i<ARX_ELM_MAX_PAYLOAD;i++)memcpy(&maximum_hex[i*3u],"aF\t",3u);
+    maximum_hex[ARX_ELM_MAX_PAYLOAD*3u]='\0';
+    assert(arx_elm327_prepare_request(&e,maximum_hex,&raw_req));
+    assert(raw_req.length==ARX_ELM_MAX_PAYLOAD);
+    for(size_t i=0;i<ARX_ELM_MAX_PAYLOAD;i++)assert(raw_req.data[i]==0xAFu);
+    ArxElmRequest preserved=raw_req;
+    memcpy(&maximum_hex[ARX_ELM_MAX_PAYLOAD*3u],"00",3u);
+    assert(!arx_elm327_prepare_request(&e,maximum_hex,&raw_req));
+    assert(memcmp(&preserved,&raw_req,sizeof(raw_req))==0);
+    assert(!arx_elm327_prepare_request(&e,"010203z4",&raw_req));
+    assert(memcmp(&preserved,&raw_req,sizeof(raw_req))==0);
+    assert(arx_elm327_prepare_request(&e," \r\n0\t1 a\nf\r",&raw_req));
+    assert(raw_req.length==2u&&raw_req.data[0]==1u&&raw_req.data[1]==0xAFu);
 
     /* The wildcard-filter parser was tested above; clear it for the transport test. */
     arx_elm327_command(&e,"ATCRA",reply,sizeof(reply));
@@ -81,6 +111,8 @@ int main(void) {
     assert(arx_elm_router_candidates(&router,&e,order)==1u && order[0]==ARX_ELM_BUS_C2);
 
     /* Automatic formatting transaction: request becomes ISO-TP SF. */
+    e.tx_header=0x18DA10F1u;
+    e.tx_extended=true;
     ArxElmTransaction tr;
     const uint8_t req[]={0x22,0xF1,0x90};
     assert(arx_elm_transaction_start(&tr,&e,ARX_BUS_C1,req,3,0,100,&f));

@@ -20,7 +20,7 @@ static const ArxFeatureDescriptor catalog[] = {
     {"read_faults","Read DTC",ARX_FEATURE_NEEDS_VEHICLE_VALIDATION,false},
     {"odometer","Odometer Blink Mask",ARX_FEATURE_NEEDS_VEHICLE_VALIDATION,true},
     {"seatbelt","Seat Belt Alarm Configuration",ARX_FEATURE_NEEDS_VEHICLE_VALIDATION,true},
-    {"pedal_controller","Pedal Controller",ARX_FEATURE_NEEDS_VEHICLE_VALIDATION,true},
+    {"pedal_controller","PedalRaceX",ARX_FEATURE_NEEDS_VEHICLE_VALIDATION,true},
     {"setup","Runtime Setup",ARX_FEATURE_STABLE_CORE,false},
     {"params_setup","Parameter Visibility Setup",ARX_FEATURE_STABLE_CORE,false},
     {"race_mask","Race Display Mask",ARX_FEATURE_NEEDS_VEHICLE_VALIDATION,true},

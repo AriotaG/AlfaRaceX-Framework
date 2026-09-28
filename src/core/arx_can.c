@@ -60,7 +60,8 @@ static ArxStatus process_queue(
 
     ArxTxItem *item = &q->items[q->tail];
 
-    if (item->deadline_ms != 0u && now_ms > item->deadline_ms) {
+    /* Deadlines are at most INT32_MAX ms ahead; zero retains its no-deadline meaning. */
+    if (item->deadline_ms != 0u && (int32_t)(now_ms - item->deadline_ms) > 0) {
         q->tail = (uint8_t)((q->tail + 1u) % ARX_CAN_QUEUE_CAPACITY);
         q->count--;
         transport->tx_expired++;
@@ -69,6 +70,8 @@ static ArxStatus process_queue(
     }
 
     ArxStatus status = sender(&item->frame, user);
+    /* A full hardware mailbox is backpressure, not a failed transmission. */
+    if (status == ARX_STATUS_FULL) return status;
     if (status == ARX_STATUS_OK) {
         q->tail = (uint8_t)((q->tail + 1u) % ARX_CAN_QUEUE_CAPACITY);
         q->count--;

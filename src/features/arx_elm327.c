@@ -257,6 +257,8 @@ size_t arx_elm327_command(ArxElm327 *f,const char *command,char *reply,size_t ca
     else if(!strcmp(at,"H1")) {f->headers=true;}
     else if(!strcmp(at,"S0")) {f->spaces=false;}
     else if(!strcmp(at,"S1")) {f->spaces=true;}
+    else if(!strcmp(at,"D0")) {f->display_dlc=false;}
+    else if(!strcmp(at,"D1")) {f->display_dlc=true;}
     else if(!strcmp(at,"V0")) {f->variable_dlc=false;}
     else if(!strcmp(at,"V1")) {f->variable_dlc=true;}
     else if(!strcmp(at,"CAF0")) {f->auto_format=false;}
@@ -283,7 +285,9 @@ size_t arx_elm327_command(ArxElm327 *f,const char *command,char *reply,size_t ca
         if(pos+1u<sizeof(body)) body[pos++]=protocol_number(f->protocol);
         body[pos]='\0';
     } else if(!strcmp(at,"RV")) {
-        strcpy(body,"12.3V");
+        /* No target voltage divider/measurement is available. Never synthesize
+           a battery voltage merely to satisfy a diagnostic client's query. */
+        strcpy(body,"?");
     } else if(strlen(at)==3u && at[0]=='A' && at[1]=='T' && at[2]>='0'&&at[2]<='2') {
         f->adaptive_timing=(uint8_t)(at[2]-'0');
     } else if(!strncmp(at,"ST",2)) {
@@ -388,14 +392,9 @@ size_t arx_elm327_command(ArxElm327 *f,const char *command,char *reply,size_t ca
         if(*p=='A'){automatic=true;p++;}
         if(strlen(p)==1u && set_protocol_number(f,*p,automatic)) {;}
         else strcpy(body,"?");
-    } else if(!strncmp(at,"IB",2)||!strncmp(at,"FC",2)||!strncmp(at,"BRT",3)) {
-        ;
-    } else if(!strncmp(at,"BRD",3)) {
-        /* USB CDC baud is virtual; transport performs the formal handshake. */
-        strcpy(body,"OK");
     } else {
-        /* Compatibility default: unknown AT extensions are accepted. */
-        strcpy(body,"OK");
+        /* Unsupported settings must not be advertised as successfully applied. */
+        strcpy(body,"?");
     }
 
     return finish(f,body,reply,cap);
@@ -403,10 +402,14 @@ size_t arx_elm327_command(ArxElm327 *f,const char *command,char *reply,size_t ca
 
 bool arx_elm327_prepare_request(const ArxElm327 *f,const char *hex,ArxElmRequest *r) {
     if(!f||!hex||!r) return false;
-    char cmd[(ARX_ELM_MAX_PAYLOAD*2u)+1u]={0};
-    if(!compact_upper(hex,cmd,sizeof(cmd))) return false;
-    size_t n=strlen(cmd);
-    if(n==0u||(n%2u)!=0u||n>(ARX_ELM_MAX_PAYLOAD*2u)) return false;
+    /* Validate before touching the output, without a 511-byte stack copy. */
+    size_t n=0u;
+    for(const char *p=hex;*p;p++){
+        const char c=*p;
+        if(c==' '||c=='\r'||c=='\n'||c=='\t')continue;
+        if(hexn(upper_ascii(c))<0||++n>ARX_ELM_MAX_PAYLOAD*2u)return false;
+    }
+    if(n==0u||(n%2u)!=0u||(!f->auto_format&&n>16u))return false;
 
     memset(r,0,sizeof(*r));
     r->can_id=f->tx_header;
@@ -414,12 +417,16 @@ bool arx_elm327_prepare_request(const ArxElm327 *f,const char *hex,ArxElmRequest
     r->auto_format=f->auto_format;
     r->auto_flow_control=f->auto_flow_control;
 
-    if(!f->auto_format && n>16u) return false;
-
-    for(size_t i=0;i<n;i+=2u) {
-        int a=hexn(cmd[i]),b=hexn(cmd[i+1u]);
-        if(a<0||b<0) return false;
-        r->data[r->length++]=(uint8_t)((a<<4)|b);
+    int high=-1;
+    for(const char *p=hex;*p;p++){
+        const char c=*p;
+        if(c==' '||c=='\r'||c=='\n'||c=='\t')continue;
+        const int digit=hexn(upper_ascii(c));
+        if(high<0)high=digit;
+        else{
+            r->data[r->length++]=(uint8_t)((high<<4)|digit);
+            high=-1;
+        }
     }
     return true;
 }

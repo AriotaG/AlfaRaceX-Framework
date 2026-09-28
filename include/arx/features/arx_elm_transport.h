@@ -50,6 +50,9 @@ typedef struct {
     bool saw_response_pending;
 
     ArxBus bus;
+    uint32_t response_value;
+    uint32_t response_mask;
+    bool response_extended;
     ArxIsoTpTx tx;
     ArxIsoTpRx rx;
     uint8_t rx_block_size;

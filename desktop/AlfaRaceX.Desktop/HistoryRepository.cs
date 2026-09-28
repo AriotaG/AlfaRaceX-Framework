@@ -73,6 +73,14 @@ internal sealed class HistoryRepository
                 Value TEXT NOT NULL,
                 UpdatedUtc TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS Operations (
+                Id TEXT PRIMARY KEY,
+                Category TEXT NOT NULL,
+                StartedUtc TEXT NOT NULL,
+                FinishedUtc TEXT,
+                Status TEXT NOT NULL
+            );
             """;
         command.ExecuteNonQuery();
     }
@@ -202,6 +210,49 @@ internal sealed class HistoryRepository
         command.ExecuteNonQuery();
     }
 
+    public string BeginOperation(string category)
+    {
+        string id = Guid.NewGuid().ToString("N");
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "INSERT INTO Operations(Id,Category,StartedUtc,Status) VALUES($id,$category,$utc,'Running');";
+        command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$category", category);
+        command.Parameters.AddWithValue("$utc", DateTime.UtcNow.ToString("O"));
+        command.ExecuteNonQuery();
+        return id;
+    }
+
+    public void FinishOperation(string id, string status)
+    {
+        if (status is not ("Completed" or "Failed" or "Cancelled"))
+            throw new ArgumentException("Stato finale operazione non valido.", nameof(status));
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE Operations SET Status=$status,FinishedUtc=$utc WHERE Id=$id AND Status='Running';";
+        command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$status", status);
+        command.Parameters.AddWithValue("$utc", DateTime.UtcNow.ToString("O"));
+        if (command.ExecuteNonQuery() != 1)
+            throw new InvalidOperationException("Operazione non attiva nel registro persistente.");
+    }
+
+    public int RecoverInterruptedOperations()
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE Operations SET Status='Interrupted' WHERE Status='Running';";
+        return command.ExecuteNonQuery();
+    }
+
+    public int CountInterruptedOperations()
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM Operations WHERE Status='Interrupted';";
+        return Convert.ToInt32(command.ExecuteScalar());
+    }
+
     public string? GetSetting(string key)
     {
         using var connection = Open();
@@ -247,9 +298,10 @@ internal sealed class HistoryRepository
             File.AppendAllText(path,
                 $"{DateTime.Now:O}\t{level}\t{category}\t{message.Replace('\r', ' ').Replace('\n', ' ')}{Environment.NewLine}");
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Logging must never take down the application.
+            // The event is already in SQLite; expose failure of the secondary sink.
+            System.Diagnostics.Trace.TraceError("Scrittura log su file fallita: {0}", ex);
         }
     }
 }

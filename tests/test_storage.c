@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #define BASE 0x0801E800u
 #define SIZE 0x1800u
@@ -35,15 +36,18 @@ int main(void) {
 
     ArxRuntimeConfig erased_cfg;
     assert(arx_storage_read_settings(&b,&erased_cfg));
-    assert(erased_cfg.immobilizer_enabled);
-    assert(erased_cfg.smart_start_stop_enabled);
-    assert(erased_cfg.clear_faults_enabled);
+    assert(!erased_cfg.immobilizer_enabled);
+    assert(!erased_cfg.smart_start_stop_enabled);
+    assert(!erased_cfg.clear_faults_enabled);
     assert(erased_cfg.diesel_profile);
     assert(!erased_cfg.ipc_my23);
     assert(!erased_cfg.dyno_enabled);
 
     ArxRuntimeConfig c;
     arx_config_defaults(&c);
+    c.immobilizer_enabled=true;
+    c.smart_start_stop_enabled=true;
+    c.clear_faults_enabled=true;
     c.shift_indicator_enabled=true;
     c.shift_threshold_rpm=4200u;
     c.pedal_mode=ARX_CFG_PEDAL_DYNAMIC;
@@ -59,6 +63,9 @@ int main(void) {
 
     ArxRuntimeConfig loaded;
     assert(arx_storage_read_settings(&b,&loaded));
+    assert(loaded.immobilizer_enabled);
+    assert(loaded.smart_start_stop_enabled);
+    assert(loaded.clear_faults_enabled);
     assert(loaded.shift_indicator_enabled);
     assert(loaded.shift_threshold_rpm==4200u);
     assert(loaded.pedal_mode==ARX_CFG_PEDAL_DYNAMIC);
@@ -77,6 +84,11 @@ int main(void) {
     float z=arx_storage_read_best_seconds(&b,2);
     assert(a>6.320f&&a<6.322f);
     assert(z>17.455f&&z<17.457f);
+    assert(!arx_storage_write_best_seconds(&b,NAN,1.0f));
+    assert(!arx_storage_write_best_seconds(&b,1.0f,INFINITY));
+    assert(!arx_storage_write_best_seconds(&b,1.0e30f,1.0f));
+    assert(arx_storage_read_best_seconds(&b,1)==a); /* Invalid inputs cannot erase saved times. */
+    assert(arx_storage_read_best_seconds(&b,3)==0.0f);
 
     puts("storage tests: OK");
     return 0;

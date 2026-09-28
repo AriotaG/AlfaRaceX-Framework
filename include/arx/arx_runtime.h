@@ -116,6 +116,10 @@ typedef struct {
     uint8_t elm_link_sequence;
     bool elm_request_active;
     bool elm_saw_response;
+    bool elm_output_overflow;
+    bool elm_flow_control_pending;
+    uint32_t pedal_speed_sample_ms;
+    uint32_t pedal_rpm_sample_ms;
     uint32_t elm_deadline_ms;
     char elm_line[96];
     uint8_t elm_line_len;
@@ -191,7 +195,8 @@ void arx_runtime_on_can(
 
 void arx_runtime_on_pedal_reply(
     ArxRuntime *rt,
-    uint8_t reply_byte
+    uint8_t reply_byte,
+    uint32_t now_ms
 );
 
 void arx_runtime_usb_configured(

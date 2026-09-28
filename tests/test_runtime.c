@@ -109,6 +109,15 @@ static void elm_runtime_unit(void){
     }
     assert(found_request);
 
+    /* A valid ISO-TP packet from an unrelated ECU must not complete the USB request. */
+    const uint32_t request_deadline=c1.elm_deadline_ms;
+    ArxCanFrame unrelated={.bus=ARX_BUS_C1,.id=0x123u,.dlc=4u,.data={3,0x62,0xF1,0x90}};
+    arx_runtime_on_can(&c1,&unrelated,100u);
+    assert(c1.elm_request_active && c1.elm_deadline_ms==request_deadline);
+    unrelated.id=0x7E8u;unrelated.extended_id=true;
+    arx_runtime_on_can(&c1,&unrelated,100u);
+    assert(c1.elm_request_active && c1.elm_deadline_ms==request_deadline);
+
     ArxCanFrame rsp={.bus=ARX_BUS_C1,.id=0x7E8u,.dlc=8u,
         .data={0x04u,0x41u,0x0Cu,0x1Au,0xF8u,0u,0u,0u}};
     arx_runtime_on_can(&c1,&rsp,101u);
@@ -195,6 +204,14 @@ static void telemetry_runtime_unit(void){
     assert(rt.vehicle.valid_mask&ARX_VS_BATTERY_CURR);
     assert(rt.vehicle.battery_current_a>-0.1f&&rt.vehicle.battery_current_a<0.1f);
 
+    rt.config.diagnostics_enabled=false;
+    arx_runtime_tick(&rt,900u);
+    assert(rt.telemetry_last_poll_ms==0u);
+    rt.config.diagnostics_enabled=true;
+    rt.config.telemetry_enabled=false;
+    arx_runtime_tick(&rt,950u);
+    assert(rt.telemetry_last_poll_ms==0u);
+    rt.config.telemetry_enabled=true;
     arx_runtime_tick(&rt,1000u);
     (void)arx_runtime_drain_can(&rt,1000u,16u);
     bool found_soc_request=false;

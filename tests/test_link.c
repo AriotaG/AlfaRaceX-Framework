@@ -29,6 +29,16 @@ int main(void) {
     f.raw[5]^=1u;
     assert(!arx_link_validate(&f));
 
+    arx_link_build_can(&f,ARX_LINK_TO_C2,ARX_LINK_REQ,false,0x7E0u,d,4,7);
+    f.raw[7]=9u;f.raw[17]=arx_link_checksum(f.raw);
+    assert(!arx_link_validate(&f));
+    f.raw[7]=4u;f.raw[18]=0u;f.raw[17]=arx_link_checksum(f.raw);
+    assert(!arx_link_validate(&f));
+    f.raw[18]=0x20u;f.raw[1]=0xFFu;f.raw[17]=arx_link_checksum(f.raw);
+    assert(!arx_link_validate(&f));
+    arx_link_build_can(&f,ARX_LINK_TO_C2,ARX_LINK_REQ,false,0x800u,d,4,7);
+    assert(!arx_link_validate(&f));
+
     puts("link tests: OK");
     return 0;
 }

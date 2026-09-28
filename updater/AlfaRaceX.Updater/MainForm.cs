@@ -1071,7 +1071,7 @@ internal sealed class MainForm : Form
                     firmware,
                     progress,
                     m => Log(m),
-                    _cts.Token);
+                    _cts.Token, confirmTarget: ConfirmDfuTarget);
 
                 SetModuleInstalled(
                     firmware.Target.Id,
@@ -1203,6 +1203,19 @@ internal sealed class MainForm : Form
         }
     }
 
+    private bool ConfirmDfuTarget(string role, string devicePath)
+    {
+        if (InvokeRequired)
+            return (bool)Invoke(new Func<bool>(() => ConfirmDfuTarget(role, devicePath)));
+        return MessageBox.Show(this,
+            $"Il dispositivo DFU non comunica il ruolo BH/C2/C1.\n\n" +
+            $"Confermi di avere collegato fisicamente il modulo {role}?\n\n" +
+            $"Dispositivo aperto:\n{devicePath}\n\n" +
+            "La scrittura modifica il firmware. In caso di dubbio scegli No e verifica il collegamento.",
+            $"Conferma modulo {role}", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+    }
+
     private async Task StartRestoreAsync()
     {
         string role = SelectedRole(_restoreRole);
@@ -1268,7 +1281,7 @@ internal sealed class MainForm : Form
                 path,
                 progress,
                 m => Log(m),
-                _cts.Token);
+                _cts.Token, confirmTarget: ConfirmDfuTarget);
 
             _restoreResult.Text = $"Ripristino {role} completato e verificato.";
             Log($"Ripristino {role} completato e verificato.");

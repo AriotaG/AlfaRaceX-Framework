@@ -81,6 +81,8 @@ typedef struct {
 } ArxConfigImage;
 
 void arx_config_defaults(ArxRuntimeConfig *config);
+/* Volatile first-boot bench policy; never writes or migrates the stored reference settings. */
+void arx_config_apply_bench_start(ArxRuntimeConfig *config);
 bool arx_config_sanitize(ArxRuntimeConfig *config);
 
 uint32_t arx_crc32(const void *data, uint32_t length);

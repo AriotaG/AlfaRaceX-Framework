@@ -86,7 +86,8 @@ bool arx_isotp_tx_on_flow_control(
     const ArxCanFrame *fc,
     uint32_t now_ms
 ) {
-    if (!tx || !fc || tx->state != ARX_ISOTP_TX_WAIT_FC || fc->dlc < 3u) {
+    if (!tx || !fc || tx->state != ARX_ISOTP_TX_WAIT_FC || fc->dlc < 3u ||
+        fc->dlc > 8u || fc->bus != tx->bus) {
         return false;
     }
     if ((fc->data[0] & 0xF0u) != 0x30u) return false;
@@ -145,18 +146,26 @@ ArxIsoTpRxEvent arx_isotp_rx_feed(
     ArxIsoTpRx *rx,
     const ArxCanFrame *frame
 ) {
-    if (!rx || !frame || frame->dlc == 0u) return ARX_ISOTP_RX_EVENT_ERROR;
+    if (!rx || !frame) return ARX_ISOTP_RX_EVENT_ERROR;
+    if (rx->state == ARX_ISOTP_RX_RECEIVING &&
+        (frame->bus != rx->source_bus || frame->id != rx->source_id ||
+         frame->extended_id != rx->source_extended)) return ARX_ISOTP_RX_EVENT_NONE;
+    if (frame->dlc == 0u || frame->dlc > 8u) {
+        rx->state = ARX_ISOTP_RX_ERROR;
+        return ARX_ISOTP_RX_EVENT_ERROR;
+    }
 
     const uint8_t pci = frame->data[0];
     const uint8_t type = (uint8_t)(pci & 0xF0u);
 
     if (type == 0x00u) {
         uint8_t len = (uint8_t)(pci & 0x0Fu);
-        if (len > 7u || (uint8_t)(len + 1u) > frame->dlc) {
+        if (len == 0u || len > 7u || (uint8_t)(len + 1u) > frame->dlc) {
             rx->state = ARX_ISOTP_RX_ERROR;
             return ARX_ISOTP_RX_EVENT_ERROR;
         }
 
+        rx->source_bus = frame->bus;
         rx->source_id = frame->id;
         rx->source_extended = frame->extended_id;
         rx->total_length = len;
@@ -173,12 +182,11 @@ ArxIsoTpRxEvent arx_isotp_rx_feed(
         }
 
         uint16_t total = (uint16_t)(((uint16_t)(pci & 0x0Fu) << 8u) | frame->data[1]);
-        if (total == 0u) {
+        if (total <= 7u || total > ARX_ISOTP_MAX_PAYLOAD) {
             rx->state = ARX_ISOTP_RX_ERROR;
             return ARX_ISOTP_RX_EVENT_ERROR;
         }
-        if (total > ARX_ISOTP_MAX_PAYLOAD) total = ARX_ISOTP_MAX_PAYLOAD;
-
+        rx->source_bus = frame->bus;
         rx->source_id = frame->id;
         rx->source_extended = frame->extended_id;
         rx->total_length = total;
@@ -211,7 +219,10 @@ ArxIsoTpRxEvent arx_isotp_rx_feed(
 
         uint16_t remaining = (uint16_t)(rx->total_length - rx->received);
         uint8_t n = remaining > 7u ? 7u : (uint8_t)remaining;
-        if ((uint8_t)(n + 1u) > frame->dlc) n = (uint8_t)(frame->dlc - 1u);
+        if ((uint8_t)(n + 1u) > frame->dlc) {
+            rx->state = ARX_ISOTP_RX_ERROR;
+            return ARX_ISOTP_RX_EVENT_ERROR;
+        }
 
         memcpy(&rx->payload[rx->received], &frame->data[1], n);
         rx->received = (uint16_t)(rx->received + n);

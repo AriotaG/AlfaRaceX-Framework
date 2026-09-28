@@ -142,17 +142,37 @@ static void elm_usb_hex_id(ArxRuntime *rt,uint32_t id,bool extended) {
     (void)elm_usb_queue(rt,out,digits);
 }
 
-static void elm_usb_emit_event(ArxRuntime *rt,const ArxElmRxEvent *event) {
-    if(!rt||!event)return;
+static bool elm_usb_emit_event(ArxRuntime *rt,const ArxElmRxEvent *event) {
+    if(!rt||!event)return false;
+    /* Reserve the entire formatted response plus final prompt before emitting
+       any byte. An unconsumed USB queue must not turn truncation into success. */
+    const size_t line_end=rt->elm.linefeeds?2u:1u;
+    const size_t header_length=rt->elm.headers?
+        (event->extended_id?8u:3u)+(rt->elm.spaces?1u:0u)+
+        (rt->elm.display_dlc?1u+(rt->elm.spaces?1u:0u):0u):0u;
+    const size_t required=header_length+
+        2u*event->length+(rt->elm.spaces&&event->length?event->length-1u:0u)+
+        2u*line_end+1u;
+    elm_usb_compact(rt);
+    if(required>sizeof(rt->elm_usb_tx)-rt->elm_usb_tx_len){
+        rt->elm_output_overflow=true;
+        return false;
+    }
     if(rt->elm.headers){
         elm_usb_hex_id(rt,event->can_id,event->extended_id);
-        (void)elm_usb_text(rt," ");
+        if(rt->elm.spaces)(void)elm_usb_text(rt," ");
+        if(rt->elm.display_dlc){
+            const char dlc=elm_hex((uint8_t)event->length);
+            (void)elm_usb_queue(rt,&dlc,1u);
+            if(rt->elm.spaces)(void)elm_usb_text(rt," ");
+        }
     }
     for(uint16_t i=0u;i<event->length;i++){
         elm_usb_hex_byte(rt,event->data[i]);
         if(rt->elm.spaces&&i+1u<event->length)(void)elm_usb_text(rt," ");
     }
     elm_usb_line_end(rt);
+    return true;
 }
 
 static void elm_usb_no_data(ArxRuntime *rt) {
@@ -219,7 +239,13 @@ static bool elm_arm_remote(
 
 static bool elm_start_candidate(ArxRuntime *rt,uint32_t now_ms) {
     if(!rt||rt->elm_candidate_index>=rt->elm_candidate_count)return false;
+    rt->elm_flow_control_pending=false;
     const ArxElmBus candidate=rt->elm_candidates[rt->elm_candidate_index];
+
+    /* Reserve the configuration, arm and request slots together. Runtime ingress
+       is serialized, so no interrupt can consume this space during construction. */
+    if(candidate!=ARX_ELM_BUS_C1 &&
+       rt->interchip.tx.count>ARX_INTERCHIP_QUEUE_SIZE-3u)return false;
 
     if(!elm_arm_remote(rt,candidate,now_ms))return false;
 
@@ -239,6 +265,7 @@ static bool elm_start_candidate(ArxRuntime *rt,uint32_t now_ms) {
 
 static void elm_finish_request(ArxRuntime *rt,bool success) {
     if(!rt)return;
+    rt->elm_flow_control_pending=false;
     elm_disarm_remote(rt);
     if(success&&rt->elm_candidate_index<rt->elm_candidate_count)
         arx_elm_router_remember(
@@ -251,6 +278,7 @@ static void elm_finish_request(ArxRuntime *rt,bool success) {
 
 static bool elm_try_next_candidate(ArxRuntime *rt,uint32_t now_ms) {
     if(!rt)return false;
+    rt->elm_flow_control_pending=false;
     elm_disarm_remote(rt);
     while(++rt->elm_candidate_index<rt->elm_candidate_count){
         if(elm_start_candidate(rt,now_ms))return true;
@@ -284,12 +312,16 @@ static void elm_handle_response(
     rt->elm_deadline_ms=now_ms+rt->elm.timeout_ms;
 
     if(kind==ARX_ELM_RX_NEED_FLOW_CONTROL){
+        if(event.length && !elm_usb_emit_event(rt,&event)){
+            elm_finish_request(rt,false);
+            return;
+        }
         ArxCanFrame fc;
         if(arx_elm_transaction_build_flow_control(
             &rt->elm_transaction,&rt->elm,now_ms,&fc
         )){
             const ArxElmBus target=rt->elm_candidates[rt->elm_candidate_index];
-            (void)elm_send_frame(rt,&fc,target,now_ms);
+            rt->elm_flow_control_pending=!elm_send_frame(rt,&fc,target,now_ms);
         }
         return;
     }
@@ -297,8 +329,8 @@ static void elm_handle_response(
     if(kind==ARX_ELM_RX_PENDING)return;
 
     if(kind==ARX_ELM_RX_RAW_FRAME||kind==ARX_ELM_RX_PAYLOAD){
-        elm_usb_emit_event(rt,&event);
-        elm_finish_request(rt,true);
+        const bool emitted=elm_usb_emit_event(rt,&event);
+        if(!emitted||!rt->elm_transaction.active)elm_finish_request(rt,emitted);
         return;
     }
 
@@ -313,18 +345,83 @@ static void elm_tick(ArxRuntime *rt,uint32_t now_ms) {
         return;
     }
 
+    if((int32_t)(now_ms-rt->elm_deadline_ms)>=0){
+        (void)elm_try_next_candidate(rt,now_ms);
+        return;
+    }
+    const ArxElmBus target=rt->elm_candidates[rt->elm_candidate_index];
+    const bool room=target==ARX_ELM_BUS_C1
+        ?rt->can_tx.queues[ARX_PRIORITY_HIGH].count<ARX_CAN_QUEUE_CAPACITY
+        :rt->interchip.tx.count<ARX_INTERCHIP_QUEUE_SIZE;
+    if(rt->elm_flow_control_pending){
+        /* The active request freezes ELM configuration, so rebuild the same FC
+           only when space is available; do not extend the response deadline. */
+        ArxCanFrame fc;
+        if(room&&arx_elm_transaction_build_flow_control(
+            &rt->elm_transaction,&rt->elm,now_ms,&fc))
+            rt->elm_flow_control_pending=!elm_send_frame(rt,&fc,target,now_ms);
+        return;
+    }
     ArxCanFrame next;
-    if(arx_elm_transaction_next_tx(&rt->elm_transaction,now_ms,&next)){
-        const ArxElmBus target=rt->elm_candidates[rt->elm_candidate_index];
+    if(room&&arx_elm_transaction_next_tx(&rt->elm_transaction,now_ms,&next)){
         (void)elm_send_frame(rt,&next,target,now_ms);
     }
+}
 
-    if((int32_t)(now_ms-rt->elm_deadline_ms)>=0)
-        (void)elm_try_next_candidate(rt,now_ms);
+/* AlfaRaceX host management extension. External pedal UART packets are unchanged. */
+static int pedal_hex(char c){
+    if(c>='0'&&c<='9')return c-'0';
+    if(c>='A'&&c<='F')return c-'A'+10;
+    return -1;
+}
+
+static bool pedal_host_command(ArxRuntime *rt,const char *line,uint32_t now_ms){
+    if(strncmp(line,"AT@PRX",6)!=0)return false;
+    const bool stationary=(rt->vehicle.valid_mask&ARX_VS_SPEED)&&now_ms-rt->pedal_speed_sample_ms<=1000u&&rt->vehicle.vehicle_speed_kmh==0.0f;
+    const bool engine_off=(rt->vehicle.valid_mask&ARX_VS_ENGINE_RPM)&&now_ms-rt->pedal_rpm_sample_ms<=1000u&&rt->vehicle.engine_rpm<400u;
+    if(strcmp(line,"AT@PRX?")!=0){
+        if(strlen(line)!=12u||line[6]!='='||line[9]!=','||
+           pedal_hex(line[7])<0||pedal_hex(line[8])<0||pedal_hex(line[10])<0||pedal_hex(line[11])<0){
+            (void)elm_usb_text(rt,"ARXPRX1:ERR:FORMAT");elm_usb_prompt(rt);return true;
+        }
+        const int mode=pedal_hex(line[7])*16+pedal_hex(line[8]);
+        const int power=pedal_hex(line[10])*16+pedal_hex(line[11])-10;
+        if(mode>ARX_PEDAL_KIDS_LIMITER||power<-10||power>10){
+            (void)elm_usb_text(rt,"ARXPRX1:ERR:RANGE");elm_usb_prompt(rt);return true;
+        }
+        if(!stationary&&!engine_off){
+            (void)elm_usb_text(rt,"ARXPRX1:ERR:VEHICLE_STATE");elm_usb_prompt(rt);return true;
+        }
+        rt->config.pedal_mode=(uint8_t)mode;rt->config.pedal_power=(int8_t)power;
+        (void)arx_pedal_set_mode(&rt->pedal,(ArxPedalMode)mode);
+        (void)arx_pedal_set_power(&rt->pedal,(int8_t)power);
+    }
+    (void)elm_usb_text(rt,"ARXPRX1:C1:");
+    elm_usb_hex_byte(rt,(uint8_t)rt->pedal.mode);
+    elm_usb_hex_byte(rt,(uint8_t)(rt->pedal.power+10));
+    elm_usb_hex_byte(rt,(uint8_t)arx_pedal_target_map(&rt->pedal,rt->vehicle.dna_mode));
+    elm_usb_hex_byte(rt,(uint8_t)rt->pedal.applied_map);
+    elm_usb_hex_byte(rt,(uint8_t)rt->pedal.communication);
+    elm_usb_hex_byte(rt,(uint8_t)((stationary||engine_off?1u:0u)|(rt->engine_running?2u:0u)|(rt->pedal.disable_pending?4u:0u)|
+        ((rt->vehicle.valid_mask&ARX_VS_ENGINE_RPM)&&now_ms-rt->pedal_rpm_sample_ms<=1000u?8u:0u)));
+    elm_usb_hex_id(rt,rt->pedal.tx_count,true);
+    elm_usb_hex_id(rt,rt->pedal.reply_count,true);
+    elm_usb_hex_id(rt,rt->pedal.error_count,true);
+    elm_usb_hex_id(rt,rt->pedal.reply_count?now_ms-rt->pedal.last_reply_ms:UINT32_MAX,true);
+    elm_usb_prompt(rt);
+    return true;
 }
 
 static void elm_process_line(ArxRuntime *rt,uint32_t now_ms) {
     if(!rt||rt->elm_line_len==0u)return;
+    elm_usb_compact(rt);
+    /* Covers command echo, the largest AT reply and error/prompt framing. */
+    if(rt->elm_output_overflow||sizeof(rt->elm_usb_tx)-rt->elm_usb_tx_len<
+       sizeof(rt->elm_line)+192u+8u){
+        rt->elm_output_overflow=true;
+        rt->elm_line_len=0u;
+        return;
+    }
     rt->elm_line[rt->elm_line_len]='\0';
 
     if(rt->elm.echo){
@@ -336,17 +433,21 @@ static void elm_process_line(ArxRuntime *rt,uint32_t now_ms) {
     while(*p==' '||*p=='\t')p++;
     const bool at=(p[0]=='A'||p[0]=='a')&&(p[1]=='T'||p[1]=='t');
 
-    if(at){
-        char reply[192];
-        const size_t n=arx_elm327_command(&rt->elm,p,reply,sizeof(reply));
-        (void)elm_usb_queue(rt,reply,n);
+    if(rt->elm_request_active){
+        (void)elm_usb_text(rt,"BUS BUSY");
+        elm_usb_prompt(rt);
         rt->elm_line_len=0u;
         return;
     }
 
-    if(rt->elm_request_active){
-        (void)elm_usb_text(rt,"BUS BUSY");
-        elm_usb_prompt(rt);
+    if(pedal_host_command(rt,p,now_ms)){
+        rt->elm_line_len=0u;
+        return;
+    }
+    if(at){
+        char reply[192];
+        const size_t n=arx_elm327_command(&rt->elm,p,reply,sizeof(reply));
+        (void)elm_usb_queue(rt,reply,n);
         rt->elm_line_len=0u;
         return;
     }
@@ -704,7 +805,8 @@ static void telemetry_accept_response(
 }
 
 static void telemetry_poll_current_page(ArxRuntime *rt,uint32_t now_ms) {
-    if(!rt||!rt->config.diesel_profile||!rt->menu.visible||
+    if(!rt||rt->elm_request_active||!rt->config.telemetry_enabled||!rt->config.diagnostics_enabled||
+       !rt->config.diesel_profile||!rt->menu.visible||
        rt->menu.level!=ARX_MENU_LEVEL_SUB||rt->menu.main_page!=1u)return;
     if(rt->telemetry_last_poll_ms&&now_ms-rt->telemetry_last_poll_ms<500u)return;
     rt->telemetry_last_poll_ms=now_ms;
@@ -1020,6 +1122,12 @@ static void handle_common_state_updates(
     uint32_t now_ms
 ) {
     arx_decode_frame(frame,&rt->vehicle);
+#if ARX_COMPILE_C1
+    if(rt->role==ARX_RUNTIME_C1&&frame->bus==ARX_BUS_C1&&!frame->extended_id){
+        if(frame->id==0x101u&&frame->dlc>=3u)rt->pedal_speed_sample_ms=now_ms;
+        if(frame->id==0x0FCu&&frame->dlc>=4u)rt->pedal_rpm_sample_ms=now_ms;
+    }
+#endif
     update_engine_state(rt,now_ms);
 
     if(frame->id==0x0FCu&&!frame->extended_id){
@@ -1092,6 +1200,9 @@ void arx_runtime_on_can(
             rt->template_1ef=*frame;
             rt->template_1ef_valid=true;
             arx_windows_observe_rf(&rt->windows,frame,now_ms);
+            /* Upstream transforms a live RF frame; never replay it on every main-loop tick. */
+            if(arx_windows_build_action(&rt->windows,frame,now_ms,&out))
+                (void)enqueue_can(rt,&out,ARX_PRIORITY_NORMAL,now_ms);
         }
 
         if(!frame->extended_id&&frame->id==0x226u)
@@ -1253,11 +1364,11 @@ void arx_runtime_on_can(
 
 }
 
-void arx_runtime_on_pedal_reply(ArxRuntime *rt,uint8_t reply_byte) {
+void arx_runtime_on_pedal_reply(ArxRuntime *rt,uint8_t reply_byte,uint32_t now_ms) {
 #if ARX_COMPILE_C1
-    if(rt&&rt->role==ARX_RUNTIME_C1)arx_pedal_on_reply(&rt->pedal,reply_byte);
+    if(rt&&rt->role==ARX_RUNTIME_C1)arx_pedal_on_reply_at(&rt->pedal,reply_byte,now_ms);
 #else
-    (void)rt;(void)reply_byte;
+    (void)rt;(void)reply_byte;(void)now_ms;
 #endif
 }
 
@@ -1631,22 +1742,14 @@ static void periodic_c1(ArxRuntime *rt,uint32_t now_ms) {
     arx_seatbelt_tick(&rt->seatbelt,now_ms);
     arx_faults_tick(&rt->faults,now_ms);
 
-    if(rt->template_1ef_valid&&
-       arx_windows_build_action(&rt->windows,&rt->template_1ef,now_ms,&out))
-        (void)enqueue_can(rt,&out,ARX_PRIORITY_NORMAL,now_ms);
-
     if(rt->ops.pedal_send){
         uint8_t packet[ARX_PEDAL_PACKET_SIZE];
-        if(arx_pedal_kids_override_required(
-            &rt->pedal,rt->config.diesel_profile,rt->vehicle.engine_rpm,
-            rt->vehicle.vehicle_speed_kmh)){
-            if(arx_pedal_build_zero_override(&rt->pedal,packet)&&
-               rt->ops.pedal_send(packet,rt->ops.user))
-                rt->pedal_packets++;
-        }else if(arx_pedal_build_sync_packet(
-            &rt->pedal,rt->vehicle.dna_mode,rt->engine_running,now_ms,packet)){
-            if(rt->ops.pedal_send(packet,rt->ops.user))
-                rt->pedal_packets++;
+        if(arx_pedal_prepare_packet(&rt->pedal,rt->vehicle.dna_mode,
+            rt->engine_running,rt->config.diesel_profile,rt->vehicle.engine_rpm,
+            rt->vehicle.vehicle_speed_kmh,now_ms,packet)){
+            const bool sent=rt->ops.pedal_send(packet,rt->ops.user);
+            arx_pedal_note_send(&rt->pedal,sent,now_ms);
+            if(sent)rt->pedal_packets++;
         }
     }
 
@@ -1715,6 +1818,10 @@ static void periodic_usb(ArxRuntime *rt,uint32_t now_ms) {
 #if ARX_COMPILE_C1
     if(rt->role==ARX_RUNTIME_C1){
         elm_tick(rt,now_ms);
+        if(rt->elm_output_overflow){
+            const char *error=rt->elm.linefeeds?"\r\nBUFFER FULL\r\n>":"\rBUFFER FULL\r>";
+            if(elm_usb_text(rt,error))rt->elm_output_overflow=false;
+        }
         if(rt->ops.usb_send&&
            rt->usb_mode.mode==ARX_USB_MODE_DIAGNOSTIC&&
            rt->usb_mode.state==ARX_USB_CONFIGURED&&
@@ -1808,7 +1915,7 @@ size_t arx_runtime_drain_interchip(ArxRuntime *rt,uint32_t now_ms,size_t budget)
     while(sent<budget){
         uint8_t diag_offset=0u;
         if(interchip_diag_offset(&rt->interchip.tx,&diag_offset)){
-            if(now_ms<rt->interchip.boot_ignore_ms)break;
+            if(!arx_interchip_ready(&rt->interchip,now_ms))break;
             const uint8_t index=(uint8_t)(
                 (rt->interchip.tx.head+diag_offset)%ARX_INTERCHIP_QUEUE_SIZE
             );

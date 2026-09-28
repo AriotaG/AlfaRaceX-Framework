@@ -7,14 +7,19 @@ void arx_windows_init(ArxWindows *f) {
 }
 
 void arx_windows_observe_rf(ArxWindows *f, const ArxCanFrame *frame, uint32_t now_ms) {
-    if (!f || !frame || frame->extended_id || frame->id != 0x1EFu || frame->dlc != 8u) return;
+    if (!f || !frame || frame->bus != ARX_BUS_C1 || frame->extended_id || frame->id != 0x1EFu || frame->dlc != 8u) return;
 
     const uint8_t action = (uint8_t)(frame->data[2] >> 4u);
     const uint8_t requestor = (uint8_t)(frame->data[2] & 0x0Eu);
+    if (f->close_mode == ARX_WINDOWS_DISABLED) { f->close_phase=0u;f->lock_clicks=0u; }
+    if (f->open_mode == ARX_WINDOWS_DISABLED) { f->open_active=false;f->unlock_clicks=0u; }
+    if (action == 0x01u) { f->open_active=false;f->unlock_clicks=0u; }
+    /* Every unlock cancels closing, including passive entry and disabled opening. */
+    if (action == 0x03u || action == 0x04u) { f->close_phase=0u;f->lock_clicks=0u; }
 
-    if (action == 0x01u) {
+    if (action == 0x01u && f->close_mode != ARX_WINDOWS_DISABLED) {
         if (now_ms - f->last_lock_ms < 3000u) f->lock_clicks++;
-        else f->lock_clicks = (f->close_mode == ARX_WINDOWS_ONE_CLICK) ? 1u : 0u;
+        else { f->close_phase=0u;f->lock_clicks = (f->close_mode == ARX_WINDOWS_ONE_CLICK) ? 1u : 0u; }
 
         f->last_lock_ms = now_ms;
         f->fob = (uint8_t)(frame->data[1] & 0x1Eu);
@@ -25,9 +30,9 @@ void arx_windows_observe_rf(ArxWindows *f, const ArxCanFrame *frame, uint32_t no
         f->unlock_clicks = 0u;
     }
 
-    if ((action == 0x03u || action == 0x04u) && requestor != 0x04u) {
+    if ((action == 0x03u || action == 0x04u) && requestor != 0x04u && f->open_mode != ARX_WINDOWS_DISABLED) {
         if (now_ms - f->last_unlock_ms < 3000u) f->unlock_clicks++;
-        else f->unlock_clicks = (f->open_mode == ARX_WINDOWS_ONE_CLICK) ? 1u : 0u;
+        else { f->open_active=false;f->unlock_clicks = (f->open_mode == ARX_WINDOWS_ONE_CLICK) ? 1u : 0u; }
 
         f->last_unlock_ms = now_ms;
         f->fob = (uint8_t)(frame->data[1] & 0x1Eu);
@@ -43,8 +48,10 @@ void arx_windows_observe_rf(ArxWindows *f, const ArxCanFrame *frame, uint32_t no
 }
 
 bool arx_windows_build_action(ArxWindows *f, const ArxCanFrame *template_1ef, uint32_t now_ms, ArxCanFrame *out) {
-    if (!f || !template_1ef || !out || template_1ef->extended_id ||
+    if (!f || !template_1ef || !out || template_1ef->bus != ARX_BUS_C1 || template_1ef->extended_id ||
         template_1ef->id != 0x1EFu || template_1ef->dlc != 8u) return false;
+    if (f->close_mode == ARX_WINDOWS_DISABLED) { f->close_phase=0u;f->lock_clicks=0u; }
+    if (f->open_mode == ARX_WINDOWS_DISABLED) { f->open_active=false;f->unlock_clicks=0u; }
 
     *out = *template_1ef;
 

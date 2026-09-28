@@ -3,6 +3,8 @@ namespace AlfaRaceX.Updater;
 internal sealed class UpdateCoordinator
 {
     private readonly ManifestClient _client = new();
+    private readonly Func<IDfuDevice> _openDevice;
+    public UpdateCoordinator(Func<IDfuDevice>? openDevice = null) => _openDevice = openDevice ?? (() => DfuDevice.OpenSingle());
 
     public Task<UpdaterManifest> LoadUpdaterManifestAsync(CancellationToken ct) =>
         _client.GetUpdaterManifestAsync(AppConstants.UpdaterManifestUrl, ct);
@@ -15,13 +17,14 @@ internal sealed class UpdateCoordinator
         IProgress<(string Message, int Progress)> progress,
         CancellationToken ct)
     {
+        ManifestClient.ValidateManifest(manifest);
         string root = Path.Combine(Path.GetTempPath(), "AlfaRaceX-Updater", manifest.Version);
         var prepared = new List<PreparedFirmware>();
 
         foreach (FirmwareTarget target in manifest.Targets)
         {
             progress.Report(($"Download {target.Label}...", 0));
-            var downloadProgress = new Progress<int>(p =>
+            var downloadProgress = new InlineProgress<int>(p =>
                 progress.Report(($"Download {target.Label}...", p)));
 
             string path = await _client.DownloadVerifiedAsync(
@@ -43,17 +46,25 @@ internal sealed class UpdateCoordinator
         PreparedFirmware firmware,
         IProgress<(string Message, int Progress)> progress,
         Action<string> log,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? safetyBackupFolder = null,
+        Action<BackupResult>? backupCreated = null,
+        Func<string, string, bool>? confirmTarget = null)
     {
         return Task.Run(() =>
         {
             progress.Report(($"Connessione {firmware.Target.Label}...", 0));
-            using var dfu = DfuDevice.OpenSingle();
+            ManifestClient.ValidateTarget(firmware.Target);
+            firmware.Image.ValidateApplicationRange(firmware.Target.ApplicationStart, firmware.Target.ApplicationLimitExclusive);
+            using var dfu = _openDevice();
+            BackupRestoreService.RequireTargetConfirmation(dfu, firmware.Target.Id, confirmTarget, log, ct);
+            BackupRestoreService.CaptureSafetyBackup(dfu, firmware.Target.Id, safetyBackupFolder, log, ct, backupCreated);
+            ct.ThrowIfCancellationRequested();
 
             log($"Rilevato dispositivo DFU per {firmware.Target.Label}.");
             log($"HEX: 0x{firmware.Image.MinAddress:X8} - 0x{firmware.Image.MaxAddress:X8}.");
 
-            var flashProgress = new Progress<int>(p =>
+            var flashProgress = new InlineProgress<int>(p =>
                 progress.Report(($"Programmazione {firmware.Target.Label}...", p)));
 
             dfu.ProgramAndVerify(
@@ -69,9 +80,9 @@ internal sealed class UpdateCoordinator
             {
                 dfu.Leave(firmware.Target.ApplicationStart);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
-                log($"{firmware.Target.Label}: disconnessione avvenuta dopo il comando di avvio.");
+                log($"{firmware.Target.Label}: Flash verificata; riavvio non confermato: {ex.Message}");
             }
 
             progress.Report(($"{firmware.Target.Label} completato.", 100));

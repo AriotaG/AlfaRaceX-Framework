@@ -87,7 +87,7 @@ int main(void){
     m.main_page=1u;assert(arx_menu_next_main(&m,&caps,1u)==3u); /* page 2 skipped */
 
     assert(arx_menu_setup_text(21u,&c,text));
-    assert(strstr(text,"Pedal Power")!=NULL);
+    assert(strstr(text,"PedalRaceX")!=NULL);
 
     puts("telemetry/menu tests: OK");
     return 0;

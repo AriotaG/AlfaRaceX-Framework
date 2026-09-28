@@ -51,6 +51,7 @@ typedef enum {
 
 typedef struct {
     ArxIsoTpRxState state;
+    ArxBus source_bus;
     uint32_t source_id;
     bool source_extended;
 

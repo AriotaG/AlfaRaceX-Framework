@@ -48,6 +48,7 @@ typedef struct {
 } ArxStm32TargetProfile;
 
 const ArxStm32TargetProfile *arx_stm32_profile(ArxTargetRole role);
+bool arx_stm32_storage_address_valid(uint32_t address, bool erase_page);
 
 #if defined(ARX_TARGET_STM32F072)
 void Error_Handler(void);

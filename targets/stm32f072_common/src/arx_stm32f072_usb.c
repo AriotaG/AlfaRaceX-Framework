@@ -40,6 +40,7 @@
 static USBD_HandleTypeDef usb_device;
 static PCD_HandleTypeDef usb_pcd;
 static uint8_t usb_rx[ARX_USB_RX_SIZE];
+static volatile uint32_t pending_rx_length;
 static uint8_t usb_tx[ARX_USB_TX_SIZE];
 static uint8_t string_desc[USBD_MAX_STR_DESC_SIZ];
 static uint8_t serial_desc[ARX_USB_SERIAL_DESC_SIZE]={ARX_USB_SERIAL_DESC_SIZE,USB_DESC_TYPE_STRING};
@@ -238,11 +239,12 @@ static USBD_DescriptorsTypeDef descriptors={
 };
 
 static int8_t cdc_init(void){
+    pending_rx_length=0u;
     (void)USBD_CDC_SetTxBuffer(&usb_device,usb_tx,0u);
     (void)USBD_CDC_SetRxBuffer(&usb_device,usb_rx);
     return (int8_t)USBD_OK;
 }
-static int8_t cdc_deinit(void){return (int8_t)USBD_OK;}
+static int8_t cdc_deinit(void){pending_rx_length=0u;return (int8_t)USBD_OK;}
 static int8_t cdc_control(uint8_t cmd,uint8_t *buf,uint16_t length){
     (void)length;
     if(cmd==CDC_GET_LINE_CODING&&buf){
@@ -254,10 +256,25 @@ static int8_t cdc_control(uint8_t cmd,uint8_t *buf,uint16_t length){
     return (int8_t)USBD_OK;
 }
 static int8_t cdc_receive(uint8_t *buf,uint32_t *length){
-    if(buf&&length&&*length) arx_stm32f072_usb_rx(buf,(size_t)*length);
+    if(buf&&length&&*length && !arx_stm32f072_usb_rx(buf,(size_t)*length)){
+        /* Keep this OUT packet owned; endpoint NAKs until main can queue it. */
+        pending_rx_length=*length;
+        return (int8_t)USBD_OK;
+    }
     (void)USBD_CDC_SetRxBuffer(&usb_device,usb_rx);
     (void)USBD_CDC_ReceivePacket(&usb_device);
     return (int8_t)USBD_OK;
+}
+
+void arx_stm32f072_usb_poll(void){
+    const uint32_t mask=__get_PRIMASK();
+    __disable_irq();
+    if(pending_rx_length && arx_stm32f072_usb_rx(usb_rx,(size_t)pending_rx_length)){
+        pending_rx_length=0u;
+        (void)USBD_CDC_SetRxBuffer(&usb_device,usb_rx);
+        (void)USBD_CDC_ReceivePacket(&usb_device);
+    }
+    __set_PRIMASK(mask);
 }
 static USBD_CDC_ItfTypeDef cdc_ops={
     .Init=cdc_init,.DeInit=cdc_deinit,.Control=cdc_control,

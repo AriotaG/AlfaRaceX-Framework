@@ -8,6 +8,14 @@
 
 #define ARX_PEDAL_PACKET_SIZE 9u
 #define ARX_PEDAL_UART_BAUD   9600u
+#define ARX_PEDAL_REPLY_TIMEOUT_MS 100u
+
+typedef enum {
+    ARX_PEDAL_COMM_UNKNOWN=0, ARX_PEDAL_COMM_WAITING,
+    ARX_PEDAL_COMM_MAP_CONFIRMED, ARX_PEDAL_COMM_TIMEOUT,
+    ARX_PEDAL_COMM_TX_ERROR, ARX_PEDAL_COMM_INVALID_REPLY,
+    ARX_PEDAL_COMM_MAP_MISMATCH
+} ArxPedalCommState;
 
 typedef enum {
     ARX_PEDAL_DISABLED = 0,
@@ -34,6 +42,14 @@ typedef struct {
     ArxPedalMode mode;
     int8_t power;                 /* -10 .. +10 */
     ArxPedalMap applied_map;
+    ArxPedalMap requested_map;
+    ArxPedalCommState communication;
+    bool waiting_reply;
+    bool disable_pending;
+    bool attempted;
+    bool kids_selection_pending; /* One A-min request on entry, even before engine start. */
+    uint32_t error_count;
+    uint32_t last_reply_ms;
 
     uint32_t last_tx_ms;
     uint32_t retry_interval_ms;
@@ -49,6 +65,12 @@ bool arx_pedal_set_power(ArxPedalController *f, int8_t power);
 ArxPedalMap arx_pedal_target_map(const ArxPedalController *f, ArxDnaMode dna_mode);
 ArxPedalMap arx_pedal_parse_reply(uint8_t reply_byte);
 void arx_pedal_on_reply(ArxPedalController *f, uint8_t reply_byte);
+void arx_pedal_on_reply_at(ArxPedalController *f, uint8_t reply_byte, uint32_t now_ms);
+void arx_pedal_note_send(ArxPedalController *f, bool success, uint32_t now_ms);
+void arx_pedal_tick(ArxPedalController *f, bool engine_running, uint32_t now_ms);
+bool arx_pedal_prepare_packet(ArxPedalController *f, ArxDnaMode dna_mode,
+    bool engine_running, bool diesel, uint16_t rpm, float speed_kmh,
+    uint32_t now_ms, uint8_t out[ARX_PEDAL_PACKET_SIZE]);
 
 bool arx_pedal_needs_sync(
     const ArxPedalController *f,

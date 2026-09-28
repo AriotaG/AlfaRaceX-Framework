@@ -3,7 +3,6 @@ using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.Reflection;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Windows;
 
@@ -19,15 +18,40 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, PreparedFirmware> _prepared = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _operation;
     private UpdateManifest? _manifest;
+    private int _manifestGeneration;
+    internal Func<string, IPedalRaceXTransport> PedalTransportFactory { get; set; } = port => new PedalRaceXSerialTransport(port);
 
     public MainWindow()
     {
         InitializeComponent();
+        // WPF work-area coordinates exclude the taskbar and follow system scaling.
+        // Start on the primary work area, including displays smaller than the design size.
+        Rect workArea = SystemParameters.WorkArea;
+        MinWidth = Math.Min(MinWidth, workArea.Width);
+        MinHeight = Math.Min(MinHeight, workArea.Height);
+        Width = Math.Min(Width, workArea.Width);
+        Height = Math.Min(Height, workArea.Height);
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Left = workArea.Left + (workArea.Width - Width) / 2;
+        Top = workArea.Top + (workArea.Height - Height) / 2;
+        InitializeDeviceNotifications();
         DesktopPaths.Ensure();
+        StartupLog.Write("INITIALIZE_DATABASE");
         _history.Initialize();
+        StartupLog.Write("DATABASE_READY");
+        int interrupted = _history.RecoverInterruptedOperations();
+        StartupLog.Write($"RECOVERY_CHECK_COMPLETE interruptedOperations={interrupted}");
+        if (interrupted > 0)
+            _history.AddEvent("ERROR", "RECOVERY", $"Rilevate {interrupted} operazioni interrotte. Verificare log, backup e dispositivo; nessuna ripresa automatica.");
         _history.AddEvent("INFO", "APP", $"Avvio AlfaRaceX Desktop {AppVersion}.");
         Loaded += OnLoaded;
-        Closed += (_, _) => _operation?.Cancel();
+        Closing += (_, e) =>
+        {
+            if (_operation is null) return;
+            e.Cancel = true;
+            _operation.Cancel();
+            Post("error", new { message = "Annullamento richiesto. Attendi l'arresto dell'operazione prima di chiudere." });
+        };
     }
 
     private static string AppVersion =>
@@ -37,8 +61,12 @@ public partial class MainWindow : Window
     {
         try
         {
+            StartupLog.Write("CREATE_WEBVIEW2");
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: DesktopPaths.WebView2);
             await Browser.EnsureCoreWebView2Async(environment);
+            Browser.CoreWebView2.ProcessFailed += (_, failure) =>
+                _history.AddEvent("ERROR", "WEBVIEW2",
+                    $"Processo {failure.ProcessFailedKind}, motivo {failure.Reason}, exit {failure.ExitCode}: {failure.ProcessDescription}");
 
             string webRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
             if (!Directory.Exists(webRoot))
@@ -58,15 +86,18 @@ public partial class MainWindow : Window
             Browser.CoreWebView2.NavigationStarting += (_, args) =>
             {
                 if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out Uri? uri) ||
+                    uri.Scheme != "https" || !uri.IsDefaultPort ||
                     !string.Equals(uri.Host, UiHost, StringComparison.OrdinalIgnoreCase))
                     args.Cancel = true;
             };
             Browser.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
             Browser.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
             Browser.Source = new Uri($"https://{UiHost}/index.html");
+            StartupLog.Write("WEBVIEW2_READY");
         }
         catch (Exception ex)
         {
+            StartupLog.Write("WEBVIEW2_FAILED", ex);
             _history.AddEvent("ERROR", "UI", ex.Message);
             MessageBox.Show(
                 "Impossibile avviare l'interfaccia AlfaRaceX.\n\n" + ex.Message,
@@ -81,6 +112,9 @@ public partial class MainWindow : Window
     {
         try
         {
+            if (!Uri.TryCreate(e.Source, UriKind.Absolute, out var source) ||
+                source.Scheme != "https" || source.Host != UiHost || !source.IsDefaultPort)
+                throw new InvalidOperationException("Origine messaggio UI non autorizzata.");
             using JsonDocument doc = JsonDocument.Parse(e.WebMessageAsJson);
             JsonElement root = doc.RootElement;
             string action = root.TryGetProperty("action", out JsonElement a) ? a.GetString() ?? "" : "";
@@ -114,6 +148,13 @@ public partial class MainWindow : Window
             case "refreshDashboard":
                 await SendDashboardAsync();
                 break;
+            case "obdRead":
+                await ReadObdAsync(ReadString(payload, "host"), checked((int)ReadLong(payload, "port")),
+                    payload.TryGetProperty("continuous", out var continuous) && continuous.GetBoolean());
+                break;
+            case "obdView":
+                SetObdView(payload.GetProperty("visible").GetBoolean(), ReadString(payload, "group"));
+                break;
             case "loadManifest":
                 await SendManifestAsync(force: true);
                 break;
@@ -137,6 +178,15 @@ public partial class MainWindow : Window
                 break;
             case "getLogs":
                 SendLogs();
+                break;
+            case "pedalPorts":
+                Post("pedalPorts", PedalRaceXSerialTransport.AvailablePorts());
+                break;
+            case "pedalRead":
+                await PedalRaceXAsync(ReadString(payload, "port"), null, null);
+                break;
+            case "pedalApply":
+                await PedalRaceXAsync(ReadString(payload, "port"), checked((int)ReadLong(payload, "mode")), checked((int)ReadLong(payload, "power")));
                 break;
             case "clearLogs":
                 _history.ClearEvents();
@@ -175,7 +225,8 @@ public partial class MainWindow : Window
             repository = "https://github.com/AriotaG/AlfaRaceX-Framework",
             disclaimerVersion = DisclaimerVersion,
             disclaimerAccepted = IsDisclaimerAccepted(),
-            disclaimerAcceptedUtc = _history.GetSetting("DisclaimerAcceptedUtc")
+            disclaimerAcceptedUtc = _history.GetSetting("DisclaimerAcceptedUtc"),
+            interruptedOperations = _history.CountInterruptedOperations()
         });
         await SendDashboardAsync();
         await SendManifestAsync(force: false);
@@ -185,10 +236,19 @@ public partial class MainWindow : Window
 
     private async Task SendDashboardAsync()
     {
-        int dfuCount;
+        if (_windowClosed) return;
+        int generation = ++_dashboardGeneration;
+        int? dfuCount;
+        string? deviceError = null;
         try { dfuCount = await Task.Run(() => UsbDeviceEnumerator.FindDfuPaths().Count); }
-        catch { dfuCount = 0; }
+        catch (Exception ex)
+        {
+            dfuCount = null;
+            deviceError = ex.Message;
+            Log("ERROR", "USB", "Enumerazione USB fallita: " + ex.Message);
+        }
 
+        if (_windowClosed || generation != _dashboardGeneration) return;
         string firmwareVersion = _manifest?.Version ?? "—";
         string channel = _manifest?.Channel ?? "Release Candidate";
         Post("dashboard", new
@@ -197,6 +257,7 @@ public partial class MainWindow : Window
             firmwareVersion,
             channel,
             dfuCount,
+            deviceError,
             backupCount = _history.CountBackups(),
             preparedCount = _prepared.Count,
             dataRoot = DesktopPaths.Root
@@ -208,7 +269,15 @@ public partial class MainWindow : Window
         try
         {
             if (_manifest is null || force)
-                _manifest = await _updates.LoadManifestAsync(CancellationToken.None);
+            {
+                if (_operation is not null) return;
+                int generation = ++_manifestGeneration;
+                UpdateManifest candidate = await _updates.LoadManifestAsync(CancellationToken.None);
+                // A newer request or a started operation owns the current firmware state.
+                if (generation != _manifestGeneration || _operation is not null) return;
+                _prepared.Clear();
+                _manifest = candidate;
+            }
 
             Post("manifest", new
             {
@@ -236,6 +305,8 @@ public partial class MainWindow : Window
     {
         await RunExclusiveAsync("UPDATE", async ct =>
         {
+            ++_manifestGeneration;
+            _prepared.Clear();
             _manifest ??= await _updates.LoadManifestAsync(ct);
             var progress = new Progress<(string Message, int Progress)>(p =>
                 Post("operationProgress", new { kind = "prepare", message = p.Message, progress = p.Progress }));
@@ -263,7 +334,7 @@ public partial class MainWindow : Window
                 Post("operationProgress", new { kind = "flash", role, message = p.Message, progress = p.Progress }));
 
             Log("INFO", "FLASH", $"Avvio programmazione {role} firmware {_manifest?.Version}.");
-            await _updates.FlashAsync(firmware, progress, msg => Log("INFO", "DFU", msg), ct);
+            await _updates.FlashAsync(firmware, progress, msg => Log("INFO", "DFU", msg), ct, DesktopPaths.Backups, CatalogSafetyBackup, ConfirmDfuTarget);
             Log("INFO", "FLASH", $"Programmazione {role} completata e verificata.");
             Post("operationComplete", new { kind = "flash", role, message = $"{role} programmato e verificato." });
         });
@@ -295,7 +366,14 @@ public partial class MainWindow : Window
                 "local");
 
             Log("INFO", "BACKUP", $"Backup {role} catalogato: {Path.GetFileName(result.BinPath)}.");
-            Post("operationComplete", new { kind = "backup", role, message = $"Backup {role} completato.", sha256 = result.Sha256 });
+            Post("operationComplete", new
+            {
+                kind = "backup", role,
+                message = $"Backup {role} completato e verificato: {result.Size:N0} byte in {result.Elapsed.TotalSeconds:F1} s.\n" +
+                    $"File: {result.BinPath}\nSHA-256: {result.Sha256}",
+                sha256 = result.Sha256, binPath = result.BinPath, metadataPath = result.MetadataPath,
+                size = result.Size, elapsedSeconds = result.Elapsed.TotalSeconds, devicePath = result.DevicePath
+            });
             SendBackups();
             await SendDashboardAsync();
         });
@@ -319,11 +397,27 @@ public partial class MainWindow : Window
                 backup.BinPath,
                 progress,
                 msg => Log("INFO", "DFU", msg),
-                ct);
+                ct, backup.Sha256, DesktopPaths.Backups, CatalogSafetyBackup, ConfirmDfuTarget);
 
             Log("INFO", "RESTORE", $"Ripristino {backup.Role} completato e verificato.");
             Post("operationComplete", new { kind = "restore", role = backup.Role, message = $"Ripristino {backup.Role} completato." });
         });
+    }
+
+    private bool ConfirmDfuTarget(string role, string devicePath) => Dispatcher.Invoke(() =>
+        MessageBox.Show(this,
+            $"Il dispositivo DFU non comunica il ruolo BH/C2/C1.\n\n" +
+            $"Confermi di avere collegato fisicamente il modulo {role}?\n\n" +
+            $"Dispositivo aperto:\n{devicePath}\n\n" +
+            "La scrittura modifica il firmware. In caso di dubbio scegli No e verifica il collegamento.",
+            $"Conferma modulo {role}", MessageBoxButton.YesNo, MessageBoxImage.Warning,
+            MessageBoxResult.No) == MessageBoxResult.Yes);
+
+    private void CatalogSafetyBackup(BackupResult backup)
+    {
+        _history.AddBackup(backup.Role, backup.BinPath, backup.MetadataPath, backup.Sha256,
+            backup.Size, DateTime.UtcNow, "pre-write");
+        SendBackups();
     }
 
     private void ImportBackup(string role)
@@ -339,30 +433,51 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog(this) != true)
             return;
 
-        var info = new FileInfo(dialog.FileName);
-        if (info.Length != BackupRestoreService.FlashSize)
-            throw new InvalidDataException($"Backup non valido: attesi {BackupRestoreService.FlashSize} byte, trovati {info.Length}.");
-
-        string sha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(dialog.FileName))).ToLowerInvariant();
-        string metadata = Path.ChangeExtension(dialog.FileName, ".json");
-        _history.AddBackup(role, dialog.FileName, File.Exists(metadata) ? metadata : string.Empty, sha, info.Length, info.CreationTimeUtc, "imported");
-        Log("INFO", "BACKUP", $"Importato backup {role}: {Path.GetFileName(dialog.FileName)} ({sha}).");
+        BackupResult imported = BackupRestoreService.ImportSnapshot(role, dialog.FileName, DesktopPaths.Backups);
+        _history.AddBackup(imported.Role, imported.BinPath, imported.MetadataPath, imported.Sha256,
+            imported.Size, DateTime.UtcNow, "imported");
+        Log("INFO", "BACKUP", $"Importato backup {role}: {Path.GetFileName(dialog.FileName)}; copia verificata {imported.BinPath} ({imported.Sha256}).");
         SendBackups();
     }
+
+    private Task PedalRaceXAsync(string port, int? mode, int? power) => RunExclusiveAsync("PEDALRACEX", async ct =>
+    {
+        try
+        {
+            var status = await Task.Run(() =>
+            {
+                using var transport = PedalTransportFactory(port);
+                return mode.HasValue ? PedalRaceXProtocol.Apply(transport, mode.Value, power!.Value, ct)
+                    : PedalRaceXProtocol.Read(transport, ct);
+            }, ct);
+            Post("pedalStatus", new { port, status, observedUtc = DateTime.UtcNow });
+            Log("INFO", "PEDALRACEX", $"C1 {port}: modalità {status.Mode}, potenza {status.Power}, mappa {status.AppliedMap}, stato comunicazione {status.Communication}.");
+            if (mode.HasValue) Log("INFO", "PEDALRACEX", "Configurazione volatile accettata da C1; leggere nuovamente lo stato per la risposta del modulo esterno. La potenza non dispone di readback separato.");
+        }
+        catch
+        {
+            Post("pedalUnavailable", new { port });
+            throw;
+        }
+    });
 
     private async Task RunExclusiveAsync(string category, Func<CancellationToken, Task> work)
     {
         if (_operation is not null)
             throw new InvalidOperationException("È già in corso un'operazione. Attendi il completamento o annullala.");
 
+        string operationId = _history.BeginOperation(category);
         _operation = new CancellationTokenSource();
+        string outcome = "Failed";
         Post("busy", new { value = true, category });
         try
         {
             await work(_operation.Token);
+            outcome = "Completed";
         }
         catch (OperationCanceledException)
         {
+            outcome = "Cancelled";
             Log("WARN", category, "Operazione annullata.");
             Post("operationCancelled", new { category });
         }
@@ -373,10 +488,14 @@ public partial class MainWindow : Window
         }
         finally
         {
-            _operation.Dispose();
-            _operation = null;
-            Post("busy", new { value = false, category });
-            SendLogs();
+            try { _history.FinishOperation(operationId, outcome); }
+            finally
+            {
+                _operation.Dispose();
+                _operation = null;
+                Post("busy", new { value = false, category });
+                SendLogs();
+            }
         }
     }
 
@@ -430,8 +549,14 @@ public partial class MainWindow : Window
         Post("log", new { createdUtc = DateTime.UtcNow, level, category, message });
     }
 
-    private void Post(string type, object data)
+    internal void Post(string type, object data)
     {
+        if (Dispatcher.HasShutdownStarted) return;
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => Post(type, data));
+            return;
+        }
         if (Browser.CoreWebView2 is null)
             return;
         string json = JsonSerializer.Serialize(new { type, data });
